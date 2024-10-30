@@ -1,0 +1,7 @@
+.THIS{
+}
+
+.THIS .button {
+    --slds-c-button-radius-border: 5px;
+    height: 40px !important;
+}
