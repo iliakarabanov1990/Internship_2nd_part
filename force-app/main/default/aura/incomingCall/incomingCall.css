@@ -2,6 +2,16 @@
 }
 
 .THIS .button {
-    --slds-c-button-radius-border: 5px;
-    height: 40px !important;
+    --slds-c-button-radius-border: 7px;
+    height: 35px !important;
+    max-width: 180px;
 }
+    
+.THIS .slds-modal__container{ 
+     height: calc(100vh) !important; 
+     max-height: calc(100vh) !important; 
+} 
+    
+.THIS tr.slds-hint-parent{
+     height: 10px;
+ }

@@ -1,21 +1,8 @@
 import { LightningElement, track } from 'lwc';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
-import { createRecord } from 'lightning/uiRecordApi';
 import getContact from '@salesforce/apex/CustomerCaseController.getContact';
 import createContact from '@salesforce/apex/CustomerCaseController.createContact';
 import createCase from '@salesforce/apex/CustomerCaseController.createCase';
-import CASE_OBJECT from '@salesforce/schema/Case';
-import CONTACT_OBJECT from '@salesforce/schema/Contact';
-import FIRST_NAME_FIELD from '@salesforce/schema/Contact.FirstName';
-import LAST_NAME_FIELD from '@salesforce/schema/Contact.LastName';
-import EMAIL_FIELD from '@salesforce/schema/Contact.Email';
-import PHONE_FIELD from '@salesforce/schema/Contact.Phone';
-import SUBJECT_FIELD from '@salesforce/schema/Case.Subject';
-import SUPPLIED_PHONE_FIELD from '@salesforce/schema/Case.SuppliedPhone';
-import SUPPLIED_EMAIL_FIELD from '@salesforce/schema/Case.SuppliedEmail';
-import CONTACT_FIELD from '@salesforce/schema/Case.ContactId';
-import STATUS_FIELD from '@salesforce/schema/Case.Status';
-import ORIGIN_FIELD from '@salesforce/schema/Case.Origin';
 
 export default class InputGuest extends LightningElement {
 
@@ -25,46 +12,39 @@ export default class InputGuest extends LightningElement {
     email = '';
     phone = '';
     message = '';
+
     firstNameHintVisible = false;
     lastNameHintVisible = false;
     emailHintVisible = false;
     messageHintVisible = false;
- 
-    onChangeFirstNameHandler(event) {
-        this.firstName = event.target.value;
+    disableSave = false;
 
-        if(this.firstName.trim())
-            this.operateInput(this.template.querySelector('[data-id="firstName-hint"]'));
-    }
 
-    onChangeLastNameHandler(event) {
-        this.lastName = event.target.value;
+    async sendData(){
 
-        if(this.firstName.trim())
-            this.operateInput(this.template.querySelector('[data-id="firstName-hint"]'));
-    }
-   
-    onChangeEmailHandler(event) {
-        this.email = event.target.value;
+        let contacts = [];
 
-        if(this.firstName.trim())
-            this.operateInput(this.template.querySelector('[data-id="firstName-hint"]'));
-    }
+        try {
+            contacts = await getContact({firstName: this.firstName, lastName: this.lastName, email: this.email})} 
+        catch(error) {
+            this.dispatchEvent(new ShowToastEvent({title: 'ERROR', variant: 'error', message: error.message})); return false}
+        
+        if(contacts.length === 0){
+            try {     
+                this.contactId = await createContact({firstName: this.firstName, lastName: this.lastName, email: this.email, phone: this.phone});}  
+            catch(error) {
+                this.dispatchEvent(new ShowToastEvent({title: 'ERROR', variant: 'error', message: error.message})); return false}}
+        else   
+            this.contactId = contacts[0].Id;
 
-    onChangePhoneHandler(event) {
-        this.phone = event.target.value;
-    }
+        try {        
+            await createCase({subject: this.message, suppliedPhone: this.phone, suppliedEmail: this.email, contactId: this.contactId});
+            this.dispatchEvent(new ShowToastEvent({title: 'Message Sent', variant: 'success'})) 
+            return false}
+        catch (error) {
+            this.dispatchEvent(new ShowToastEvent({title: 'ERROR', variant: 'error', message: error.message}))}
 
-    onChangeMessageHandler(event) {
-        this.message = event.target.value;
-
-        if(this.firstName.trim())
-            this.operateInput(this.template.querySelector('[data-id="firstName-hint"]'));
-    }
-
-    async handleSave() {     
-        if(!this.errorsExist())
-            await this.sendData();            
+        return true;
     }
 
     errorsExist(){
@@ -101,29 +81,45 @@ export default class InputGuest extends LightningElement {
          return errorExist;
     }
 
-    async sendData(){
+    async handleSave(event) {     
 
-        let contacts = [];
+        if(!this.errorsExist()){
+            this.disableSave = true;
+            const isSent = await this.sendData();      
+            this.disableSave = isSent;
+        }      
+    }
+ 
+    onChangeFirstNameHandler(event) {
+        this.firstName = event.target.value;
 
-        try {
-            contacts = await getContact({firstName: this.firstName, lastName: this.lastName, email: this.email})} 
-        catch(error) {
-            this.dispatchEvent(new ShowToastEvent({title: 'ERROR', variant: 'error', message: error.message})); return}
-        
-        if(contacts.length === 0){
-            try {     
-                this.contactId = await createContact({firstName: this.firstName, lastName: this.lastName, email: this.email, phone: this.phone});}  
-            catch(error) {
-                this.dispatchEvent(new ShowToastEvent({title: 'ERROR', variant: 'error', message: error.message})); return}}
-        else   
-            this.contactId = contacts[0].Id;
+        if(this.firstName.trim())
+            this.operateInput(this.template.querySelector('[data-id="firstName-hint"]'));
+    }
 
-        try {        
-            await createCase({subject: this.message, suppliedPhone: this.phone, suppliedEmail: this.email, contactId: this.contactId});
-            this.dispatchEvent(new ShowToastEvent({title: 'Message Sent', variant: 'success'}))} 
-        catch (error) {
-            this.dispatchEvent(new ShowToastEvent({title: 'ERROR', variant: 'error', message: error.message}))}
+    onChangeLastNameHandler(event) {
+        this.lastName = event.target.value;
 
+        if(this.firstName.trim())
+            this.operateInput(this.template.querySelector('[data-id="firstName-hint"]'));
+    }
+   
+    onChangeEmailHandler(event) {
+        this.email = event.target.value;
+
+        if(this.firstName.trim())
+            this.operateInput(this.template.querySelector('[data-id="firstName-hint"]'));
+    }
+
+    onChangePhoneHandler(event) {
+        this.phone = event.target.value;
+    }
+
+    onChangeMessageHandler(event) {
+        this.message = event.target.value;
+
+        if(this.firstName.trim())
+            this.operateInput(this.template.querySelector('[data-id="firstName-hint"]'));
     }
 
     async sendDataOld(){

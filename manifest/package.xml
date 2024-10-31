@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Package xmlns="http://soap.sforce.com/2006/04/metadata">
 	<types>
+		<members>CustomerCaseController</members>
+		<members>CustomerCaseControllerTest</members>
 		<members>IncomingCallController</members>
+		<members>IncomingCallControllerTest</members>
 		<name>ApexClass</name>
 	</types>
 	<types>
@@ -17,6 +20,7 @@
 		<name>AuraDefinitionBundle</name>
 	</types>
 	<types>
+		<members>Customer_Case_Notification</members>
 		<members>Order_Count_Of_Account</members>
 		<members>Order_Count_Of_Account_On_Delete</members>
 		<name>Flow</name>

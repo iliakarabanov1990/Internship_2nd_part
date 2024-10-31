@@ -1,11 +1,11 @@
-public class IncomingCallController {
+public without sharing class IncomingCallController {
     
     @AuraEnabled(cacheable=true)
-    public static List<List<sObject>> getAccountsContactsByPhone(String searchString, String searchField) {
+    public static List<List<sObject>> getAccountsContacts(String searchString, String searchField) {
         return search.query(
             'FIND :searchString ' +
             'IN ' + searchField + ' ' + 
-            'RETURNING Account(Id, Name, Phone, BillingAddress,  RecordType.Name), ' + 
+            'RETURNING Account(Id, Name, Phone, BillingCountry, BillingCity, BillingState, BillingStreet, BillingPostalCode, RecordType.Name), ' + 
                 	  'Contact(Id, Name, Account.Name, Phone WHERE IsPersonAccount = false)');
     }
     

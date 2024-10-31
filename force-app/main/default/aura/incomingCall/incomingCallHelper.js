@@ -3,7 +3,7 @@
    		cmp.set('v.contactColumns', [
             {label: 'Name', 			fieldName: 'Link', 				type: 'url', 	sortable: true, 	typeAttributes: {label: {fieldName: 'Name', }, 		target: '_blank', tooltip: 'go to contact',},},        
             {label: 'Phone', 			fieldName: 'Phone', 			type: 'phone', 	sortable: true},        
-            {label: 'Account', 			fieldName: 'Account.Name', 		type: 'text', 	sortable: true}, 
+            {label: 'Account', 			fieldName: 'AccountName', 		type: 'text', 	sortable: true}, 
          ]);
     },
             
@@ -12,38 +12,62 @@
             {label: 'Name', 			fieldName: 'Link', 				type: 'url', 	typeAttributes: {label: {fieldName: 'Name', }, 		target: '_blank', tooltip: 'go to contact',},},        
             {label: 'Phone', 			fieldName: 'Phone', 			type: 'phone',	},        
             {label: 'Address', 			fieldName: 'BillingAddress', 	type: 'text',	},
-            {label: 'Type', 			fieldName: 'RecordType.Name', 	type: 'text',	},         
+            {label: 'Type', 			fieldName: 'RecordTypeName', 	type: 'text',	},         
          ]);          
     },
     
+    initLoad: function(cmp){
+        
+        this.clearData(cmp);
+    	this.setPhoneFromURL(cmp);
+        this.setContactColumns(cmp);
+        this.setAccountColumns(cmp);
+        this.getAccountsContacts(cmp, {fields: 'PHONE FIELDS', searchString: cmp.get('v.pnr')}, this.opperateFirstLoad);
+    },
+    
+    clearData: function(cmp){
+        cmp.set('v.accountData', []);
+        cmp.set('v.contactData', []);
+        cmp.set('v.searchStr', '');
+        cmp.set('v.isOpenModal', false);  
+        cmp.set('v.searchAndCreateVisible', false);
+        cmp.set('v.accountTableVisible', false);
+        cmp.set('v.contactTableVisible', false);
+    },
+    
     getAccountsContacts: function(cmp, searchObj, opperateFunc){
-        const action = cmp.get('c.getAccountsContactsByPhone');
+        
+        if (searchObj.searchString == 'anonymous'){ 
+            opperateFunc.call(this, cmp);
+            return;
+        }
+        
+        const action = cmp.get('c.getAccountsContacts');
         action.setParams({searchString: searchObj.searchString, searchField: searchObj.fields});
         
         action.setCallback(this, function(response) {
-            //this.handleSpinnerToggle(cmp);
+            this.handleSpinnerToggle(cmp);
             const state = response.getState();
             if(cmp.isValid() && state === 'SUCCESS') {
                 const responseData = response.getReturnValue();
-                const accountData = this.opperateFields(responseData[0]);
-                const contactData = this.opperateFields(responseData[1]);
+                const accountData = this.opperateAccountFields(responseData[0]);
+                const contactData = this.opperateContactFields(responseData[1]);
 
                 cmp.set('v.accountData', accountData);
                 cmp.set('v.contactData', contactData);
                 
-                if(opperateFunc !== null)
-                    opperateFunc.call(this, cmp);  
+                opperateFunc.call(this, cmp);  
             }
             else{
             	this.showToast(cmp, 'ERROR', 'error', 'Failed to retrieve data\n' + JSON.stringify(response.getError()));           
             }
         });
-        //this.handleSpinnerToggle(cmp);
+        this.handleSpinnerToggle(cmp);
         $A.enqueueAction(action);  
     },
     
     opperateFirstLoad: function(cmp){
-        
+
         const accountData = cmp.get('v.accountData');
         const contactData = cmp.get('v.contactData');
         
@@ -86,12 +110,34 @@
     },
     
     setPhoneFromURL: function(cmp){ 
+        cmp.set('v.pnr', this.parthPhoneFromURL(cmp));
+	},
+                
+    parthPhoneFromURL: function(cmp){ 
         const myPageRef = cmp.get('v.pageReference');
-        cmp.set('v.pnr', myPageRef.state.c__pnr);
+        const pnr = myPageRef.state.c__pnr;
+        return pnr ? pnr.trim() : 'anonymous';
 	},
     
-    opperateFields: function(dataArr){
-    	return dataArr.map(record => {record.Link = '/' + record.Id; return record;});
+    opperateAccountFields: function(dataArr){
+    	return dataArr.map(record => {
+            record.Link = '/' + record.Id;
+            record.BillingAddress = (record.BillingCountry ? record.BillingCountry + ', ' : '') 
+            						+ (record.BillingCity ? record.BillingCity + ', ' : '')  
+            						+ (record.BillingState ? record.BillingState + ', ' : '')
+            						+ (record.BillingStreet ? record.BillingStreet + ', ' : '')	
+            						+ (record.BillingPostalCode ? record.BillingPostalCode : '');
+            record.RecordTypeName = record.RecordType ? record.RecordType.Name : '';
+            return record;
+        });
+	},
+            
+    opperateContactFields: function(dataArr){
+    	return dataArr.map(record => {
+            record.Link = '/' + record.Id;
+            record.AccountName =  record.Account ? record.Account.Name : '';
+            return record;
+        });
 	},
                                       
   	openObjectCreateForm: function(cmp, objectApiName, defaultFieldValues, state){
@@ -117,19 +163,16 @@
     },    
                                       
 	showToast: function(cmp, title, type, message){ 
-        
-        /*//переписать
-        if(type === 'success'){
-         	cmp.set('v.visibleSucc', true);
-        	cmp.set('v.messSucc', message);   
-            setTimeout(() => {
-                cmp.set('v.visibleSucc', false);
-            }, 2000 );}
-        else if(type === 'error'){
-            cmp.set('v.visibleErr', true);
-        	cmp.set('v.messErr', message);}  
-        else
-         	alert(message);   */               
+        const toastEvent = $A.get("e.force:showToast");
+        toastEvent.setParams({
+            title : title,
+            message: message,
+            duration: '3000',
+            key: 'info_alt',
+            type: type,
+            mode: 'pester'
+        });
+        toastEvent.fire();            
     },
                 
     handleSpinnerToggle: function (cmp) {

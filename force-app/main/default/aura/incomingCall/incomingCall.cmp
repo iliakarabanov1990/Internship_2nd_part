@@ -1,6 +1,5 @@
 <aura:component controller="IncomingCallController" implements="lightning:isUrlAddressable">
-    
-    
+        
     <aura:attribute name="pnr" 					type="String"/>  
     <aura:attribute name="accountData" 			type="Account[]"/>
     <aura:attribute name="contactData" 			type="Contact[]"/>
@@ -18,70 +17,58 @@
     <aura:attribute name="accountTableVisible" 		type="boolean" 	default="false"/>
     <aura:attribute name="contactTableVisible" 		type="boolean" 	default="false"/>
     
-    <aura:handler name="init" value="{!this}" action="{!c.onPageReferenceChange}"/>
+    <aura:handler name="init" value="{!this}" 		action="{!c.onPageReferenceChange}"/>
     
-    <lightning:spinner class="spinner slds-hide" aura:id="spinner"/>
+    <lightning:spinner class="spinner" aura:id="spinner"/>
 
     <aura:if isTrue="{!v.isOpenModal}">
-    	<!--<section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open" style="position:absolute;top:1rem;left:1rem;right:1rem;">-->
-        <section role="dialog" tabindex="-1" aria-modal="true" aria-labelledby="modal-heading-01" class="slds-modal slds-fade-in-open slds-modal_large" style="position:absolute; top:-10vh;">
+        <section role="dialog" tabindex="-1" aria-modal="true" aria-labelledby="modal-heading-01" class="slds-modal slds-fade-in-open slds-modal_large" style="position:absolute; top:-25vh;">
           	<div class="slds-modal__container">  
-                <div class="slds-modal__header">
+                <div class="slds-modal__header slds-modal__header_empty">
                     <lightning:buttonIcon iconName="utility:close" class="slds-modal__close" onclick="{!c.handleModalCancel}"/>
-                </div>
-                
-                <div class="slds-modal__content slds-p-around_small" style="height:calc(95vh) !important; max-height: 800px !important;">
-                    <div>
-                        <aura:if isTrue="{!v.searchAndCreateVisible}"> 
-                            
-                            <lightning:card>
-                                <div class="slds-grid slds-grid_vertical-align-center">
-                                    <div class="slds-col slds-grid slds-grid_vertical slds-grow-none">
-                                        <lightning:icon iconName="standard:person_account" alternativeText="Person Account" title="Person Account" size="large"/>
-                                        <lightning:icon iconName="utility:call" alternativeText="Call" title="Call" size="small" class="slds-col_bump-left slds-var-m-top_medium"/>                                   
-                                    </div>                              
-                                    <div class="slds-col slds-grid slds-grid_vertical slds-grow-none">
-                                        <span class="slds-text-heading_large slds-m-left_medium"><b>Unbekannter Anrufer</b></span>
-                                        <span class="slds-col_bump-right slds-var-m-top_large slds-m-left_large slds-text-color_success"><b>{!v.pnr}</b></span>
-                                    </div>
-                               	</div>
-                          	</lightning:card>                             
-                            
-                        <div class="slds-grid">
-                            <div class="slds-col slds-size_2-of-6">
-                                <div class="slds-grid slds-grid_align-spread">
-                                    <div class="slds-col">
-                                        <lightning:button variant="brand" label="Neuer Personen Account" title="Neuer Personen Account" onclick="{!c.handleNewPersonAccountButton}" class="button"/>
-                                    </div>
-                                    <div class="slds-col">
-                                        <lightning:button variant="brand" label="Neuer Geschäfts-Kontakt" title="Neuer Geschäfts-Kontakt" onclick="{!c.handleNewContactButton}" class="button"/>
-                                    </div>
-                                    <div class="slds-col">
-                                        <lightning:button variant="brand" label="Neuer Account" title="Neuer Account" onclick="{!c.handleNewAccountButton}" class="button"/>
-                                    </div>
-                                </div> 
-                                <lightning:input type="search" onchange="{!c.handleSearch}" value="{!v.searchStr}" title="2Existierende Accounts und Kontakte durchsuchen"/>
+                </div>                
+                <div class="slds-modal__content slds-p-around_small" style="height: calc(100vh) !important; max-height: calc(100vh) !important;">
+                    <div> 
+                        <div class="slds-grid slds-grid_vertical-align-center">
+                            <div class="slds-col slds-grid slds-grid_vertical slds-grow-none">
+                                <lightning:icon iconName="standard:person_account" alternativeText="Person Account" title="Person Account" size="large"/>
+                                <lightning:icon iconName="utility:call" alternativeText="Call" title="Call" size="small" class="slds-col_bump-left slds-var-m-top_x-small"/>                                   
+                            </div>                              
+                            <div class="slds-col slds-grid slds-grid_vertical slds-grow-none">
+                                <span class="slds-text-heading_large slds-m-left_medium">{! v.searchAndCreateVisible ? $Label.c.Unknown_Caller : $Label.c.Found_Accounts}</span>
+                                <span class="slds-col_bump-right slds-var-m-top_large slds-m-left_large slds-text-color_success"><b>{! v.pnr == 'anonymous' ? $Label.c.Anonymous : v.pnr}</b></span>
                             </div>
-                            <div class="slds-col slds-size_4-of-6">
+                        </div>                           
+                     	<aura:if isTrue="{!v.searchAndCreateVisible}">   
+                        	<div class="slds-grid">
+                                <div class="slds-col slds-size_1-of-2">
+                                    <div class="slds-grid slds-wrap slds-grid_align-spread slds-m-top_large">
+                                        <lightning:button variant="brand" label="{!$Label.c.New_Personal_Account}" title="{!$Label.c.New_Personal_Account}" onclick="{!c.handleNewPersonAccountButton}" class="button slds-col"/>
+                                        <lightning:button variant="brand" label="{!$Label.c.New_Business_Contact}" title="{!$Label.c.New_Business_Contact}" onclick="{!c.handleNewContactButton}" class="button slds-col"/>
+                                        <lightning:button variant="brand" label="{!$Label.c.New_Account}" title="{!$Label.c.New_Account}" onclick="{!c.handleNewAccountButton}" class="button slds-col"/>
+                                    </div> 
+                                    <lightning:input type="search" onchange="{!c.handleSearch}" value="{!v.searchStr}" placeholder="{!$Label.c.Search_Existing_Accounts_Contacts}" title="{!$Label.c.Search_Existing_Accounts_Contacts}"/>
+                                </div>
                             </div>
-                        </div>
-                    </aura:if>
-                    <aura:if isTrue="{!v.accountTableVisible}">
-                        <h2 class="slds-text-heading_medium slds-m-top_large slds-m-bottom_xx-small">Gefundene Accounts</h2>
-                        	<lightning:datatable
-                            	columns="{!v.accountColumns}"
-                                data="{!v.accountData}"
-                                keyField="id"        
-                                hideCheckboxColumn="true"/>
-                    </aura:if>
-                    <aura:if isTrue="{!v.contactTableVisible}">
-                        <h2 class="slds-text-heading_medium slds-m-top_large slds-m-bottom_xx-small">Gefundene Contacts</h2>
-                            <lightning:datatable
-                               columns="{!v.contactColumns}"
-                               data="{!v.contactData}"
-                               keyField="id"        
-                               hideCheckboxColumn="true"/>
-                    </aura:if>
+                        </aura:if>
+                        <aura:if isTrue="{!v.accountTableVisible}">
+                            <h2 class="slds-text-heading_small slds-m-top_large slds-m-left_xx-small slds-m-bottom_xx-small">{!$Label.c.Found_Accounts}</h2>
+                                <lightning:datatable
+                                    columns="{!v.accountColumns}"
+                                    data="{!v.accountData}"
+                                    keyField="id"        
+                                    hideCheckboxColumn="true"
+                                    class="slds-text-body_small"/>
+                        </aura:if>
+                        <aura:if isTrue="{!v.contactTableVisible}">
+                            <h2 class="slds-text-heading_small slds-m-top_small slds-m-left_xx-small slds-m-bottom_xx-small">{!$Label.c.Found_Contacts}</h2>
+                                <lightning:datatable 
+                                   columns="{!v.contactColumns}"
+                                   data="{!v.contactData}"
+                                   keyField="id"        
+                                   hideCheckboxColumn="true"
+                                   class="slds-text-body_small"/>
+                        </aura:if>
                     </div>
               	</div>
        		</div>

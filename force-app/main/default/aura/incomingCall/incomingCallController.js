@@ -1,31 +1,28 @@
 ({
     onPageReferenceChange: function(cmp, evt, helper) {       
-        //https://saccesscraft-dev-ed.develop.lightning.force.com/lightning/cmp/c__incomingCall?png=7665
-        helper.setPhoneFromURL(cmp);
-        helper.setContactColumns(cmp);
-        helper.setAccountColumns(cmp);
-        helper.getAccountsContacts(cmp, {fields: 'PHONE FIELDS', searchString: cmp.get('v.pnr')}, helper.opperateFirstLoad);
+        //https://saccesscraft-dev-ed.develop.lightning.force.com/lightning/cmp/c__incomingCall?c__pnr=7665
+        helper.initLoad(cmp);
     },
     
     handleNewPersonAccountButton: function(cmp, evt, helper) {
-
-        helper.openObjectCreateForm(cmp,
-                                    'Account', 
-                                    {Phone: cmp.get('v.pnr')}, 
-                                    {recordTypeId: cmp.get('v.businessRecordTypeId')});             
+		helper.openObjectCreateForm(cmp, 'Account', {Phone: cmp.get('v.pnr')}, {});                  
     },
     
     handleNewContactButton: function(cmp, evt, helper) {
-        helper.openObjectCreateForm(cmp, 'Contact', {}, {});
+        helper.openObjectCreateForm(cmp, 'Contact', {Phone: cmp.get('v.pnr')}, {});
     },
     
     handleNewAccountButton: function(cmp, evt, helper) {
-        helper.openObjectCreateForm(cmp, 'Account', {Phone: cmp.get('v.pnr')}, {}, {});
+        
+        helper.openObjectCreateForm(cmp,
+                                    'Account', 
+                                    {Phone: cmp.get('v.pnr')}, 
+                                    {recordTypeId: cmp.get('v.businessRecordTypeId')});
     },
     
     handleSearch: function(cmp, event, helper) { 
         const searchStr = cmp.get('v.searchStr').trim();
-        if(!!searchStr)
+        if(searchStr && searchStr.length >= 2)
         	helper.getAccountsContacts(cmp, {fields: 'NAME FIELDS', searchString: searchStr}, helper.opperateTablesVisible); 
         else{
          	cmp.set('v.accountData', []);
@@ -36,5 +33,5 @@
     
     handleModalCancel: function(cmp, event, helper) {
         helper.navigateToURL('e.force:navigateToURL', {'url': '/lightning/page/home'});
-    },
+    }, 
 })

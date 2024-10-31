@@ -63,6 +63,13 @@
                 <elementReference>$Record.Account.Id</elementReference>
             </value>
         </filters>
+        <filters>
+            <field>ShippingCountry</field>
+            <operator>EqualTo</operator>
+            <value>
+                <stringValue>USA</stringValue>
+            </value>
+        </filters>
         <getFirstRecordOnly>false</getFirstRecordOnly>
         <object>Order</object>
         <storeOutputAutomatically>true</storeOutputAutomatically>
