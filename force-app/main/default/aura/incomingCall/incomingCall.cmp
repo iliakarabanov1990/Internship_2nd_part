@@ -22,7 +22,7 @@
     <lightning:spinner class="spinner" aura:id="spinner"/>
 
     <aura:if isTrue="{!v.isOpenModal}">
-        <section role="dialog" tabindex="-1" aria-modal="true" aria-labelledby="modal-heading-01" class="slds-modal slds-fade-in-open slds-modal_large" style="position:absolute; top:-25vh;">
+        <section role="dialog" tabindex="-1" aria-modal="true" aria-labelledby="modal-heading-01" class="slds-modal slds-fade-in-open slds-modal_large" style="position:absolute; top:-15vh;">
           	<div class="slds-modal__container">  
                 <div class="slds-modal__header slds-modal__header_empty">
                     <lightning:buttonIcon iconName="utility:close" class="slds-modal__close" onclick="{!c.handleModalCancel}"/>

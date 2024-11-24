@@ -1,0 +1,57 @@
+<template>
+
+    <lightning-card>
+        THIS IS LDS
+        <div data-id="firstName-hint-box" class="slds-grid slds-gutters slds-p-horizontal_large slds-form-element">
+            <div class="slds-col slds-size_1-of-3">
+                <label class="slds-form-element__label">
+                    <abbr class="slds-required" title="required">*</abbr>First Name</label>                  
+            </div>
+            <div class="slds-col slds-size_2-of-3 slds-form-element__control">
+                <input type="text" value={firstName} onchange={onChangeFirstNameHandler} class="slds-input" required="" aria-invalid></input>   
+                <div data-id="firstName-hint" data-name="error-hint" class="slds-form-element__help slds-text-color_destructive slds-text-body_small slds-hidden">Enter a value.</div>
+            </div>          
+        </div>
+        <div data-id="lastName-hint-box" class="slds-grid slds-gutters slds-m-top_medium slds-p-horizontal_large slds-form-element">
+            <div class="slds-col slds-size_1-of-3">
+                <label class="slds-form-element__label">
+                    <abbr class="slds-required" title="required">*</abbr>Last Name</label>                  
+            </div>
+            <div class="slds-col slds-size_2-of-3 slds-form-element__control">
+                <input type="text" value={lastName} onchange={onChangeLastNameHandler} class="slds-input" required="" aria-invalid></input>   
+                <div data-id="lastName-hint" data-name="error-hint" class="slds-form-element__help slds-text-color_destructive slds-text-body_small slds-hidden">Enter a value.</div>
+            </div>          
+        </div>
+        <div data-id="email-hint-box" class="slds-grid slds-gutters slds-m-top_medium slds-p-horizontal_large slds-form-element">
+            <div class="slds-col slds-size_1-of-3">
+                <label class="slds-form-element__label">
+                    <abbr class="slds-required" title="required">*</abbr>Email</label>                  
+            </div>
+            <div class="slds-col slds-size_2-of-3 slds-form-element__control">
+                <input type="email" value={email} onchange={onChangeEmailHandler} class="slds-input" required="" aria-invalid></input>   
+                <div data-id="email-hint" data-name="error-hint" class="slds-form-element__help slds-text-color_destructive slds-text-body_small slds-hidden">Enter a value.</div>
+            </div>          
+        </div>
+        <div class="slds-grid slds-gutters slds-m-top_large slds-p-horizontal_large">
+            <div class="slds-col slds-size_1-of-3 slds-form-element">
+                <label class="slds-form-element__label">Phone Number</label>                  
+            </div>
+            <div class="slds-col slds-size_2-of-3 slds-form-element__control">
+                <input type="tel" value={phone} onchange={onChangePhoneHandler} class="slds-input"></input>
+            </div>
+        </div>
+        <div data-id="message-hint-box" class="slds-grid slds-gutters slds-m-top_medium slds-p-horizontal_large slds-form-element">
+            <div class="slds-col slds-size_1-of-3">
+                <label class="slds-form-element__label">
+                    <abbr class="slds-required" title="required">*</abbr>Message</label>                  
+            </div>
+            <div class="slds-col slds-size_2-of-3 slds-form-element__control">
+                <textarea onchange={onChangeMessageHandler} class="slds-textarea" required="" aria-invalid></textarea>  
+                <div data-id="message-hint" data-name="error-hint" class="slds-form-element__help slds-text-color_destructive slds-text-body_small slds-hidden">Enter a value.</div>
+            </div>          
+        </div>
+        <div class="slds-grid slds-grid_align-center slds-m-top_large">
+            <lightning-button variant="brand" label="Save" onclick={handleSave} disabled={disableSave}></lightning-button>
+        </div>    
+    </lightning-card>
+</template>
