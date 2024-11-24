@@ -16,6 +16,7 @@
 		<name>ApexTrigger</name>
 	</types>
 	<types>
+		<members>CTI_Emulator</members>
 		<members>incomingCall</members>
 		<name>AuraDefinitionBundle</name>
 	</types>

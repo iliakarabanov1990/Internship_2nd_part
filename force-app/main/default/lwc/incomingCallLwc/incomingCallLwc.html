@@ -1,6 +1,7 @@
 <template>
-      
-    <!--<lightning-spinner class="spinner"/> </lightning-spinner>-->
+    <template lwc:if={isLoading}>  
+        <lightning-spinner alternative-text="Loading" size="large"></lightning-spinner>
+    </template> 
     <template lwc:if={isOpenModal}>
         <section role="dialog" tabindex="-1" aria-modal="true" aria-labelledby="modal-heading-01" class="slds-modal slds-fade-in-open slds-modal_large" style="position:absolute; top:-15vh;">
           	<div class="slds-modal__container">  

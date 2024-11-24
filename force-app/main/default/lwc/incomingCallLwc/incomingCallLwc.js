@@ -38,6 +38,7 @@ export default class IncomingCallLwc extends NavigationMixin(LightningElement) {
     searchAndCreateVisible = false;
     accountTableVisible = false;
     contactTableVisible = false;
+    isLoading = true;
 
     @wire(CurrentPageReference)
     getStateParameters(currentPageReference) {
@@ -73,7 +74,7 @@ export default class IncomingCallLwc extends NavigationMixin(LightningElement) {
     }
 
     parsePhoneFromURL(pnr){ 
-        return pnr.trim() ?? 'anonymous';
+        return pnr ? pnr.trim() : 'anonymous';
     }
 
     setContactColumns() {
@@ -98,6 +99,7 @@ export default class IncomingCallLwc extends NavigationMixin(LightningElement) {
         if (searchObj.searchString == 'anonymous')
             return;
        
+        this.toggleSpinner(true);
         try{
             const data = await getAccountsContacts({searchString: searchObj.searchString, searchField: searchObj.fields});
             this.accountData = this.operateAccountFields(data[0]);
@@ -106,9 +108,8 @@ export default class IncomingCallLwc extends NavigationMixin(LightningElement) {
         catch(error){
             this.dispatchEvent(new ShowToastEvent({title: 'ERROR', variant: 'error', message: error.message})); 
         }     
-        //this.handleSpinnerToggle(cmp);
+        this.toggleSpinner(false);
     }
-
 
     operateAccountFields(dataArr){
         return dataArr.map(record => {
@@ -147,7 +148,9 @@ export default class IncomingCallLwc extends NavigationMixin(LightningElement) {
         else{
             this.isOpenModal = true;   
             this.operateTablesVisible();
-        }     
+        }   
+        
+        toggleSpinner(false);
     }
     
     operateTablesVisible(){       
@@ -219,14 +222,22 @@ export default class IncomingCallLwc extends NavigationMixin(LightningElement) {
     }
 
     async handleSearch(event){ 
+
+        this.toggleSpinner(true);
+
         this.accountData = [];
         this.contactData = [];
-
         const searchStr = event.target.value;
 
         if(searchStr && searchStr.length >= 2)
         	await this.getAccountsContacts({fields: 'NAME FIELDS', searchString: searchStr});
 
         this.operateTablesVisible();
+
+        this.toggleSpinner(false);
+    }
+
+    toggleSpinner(isLoading){
+        this.isLoading = isLoading;
     }
 }

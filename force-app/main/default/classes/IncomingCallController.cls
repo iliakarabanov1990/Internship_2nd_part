@@ -4,7 +4,7 @@ public without sharing class IncomingCallController {
     public static List<List<sObject>> getAccountsContacts(String searchString, String searchField) {
         return search.query(
             'FIND :searchString ' +
-            'IN ' + searchField + ' ' + 
+            'IN ' + String.escapeSingleQuotes(searchField) + ' ' + 
             'RETURNING Account(Id, Name, Phone, BillingCountry, BillingCity, BillingState, BillingStreet, BillingPostalCode, RecordType.Name), ' + 
                 	  'Contact(Id, Name, Account.Name, Phone WHERE IsPersonAccount = false)');
     }
