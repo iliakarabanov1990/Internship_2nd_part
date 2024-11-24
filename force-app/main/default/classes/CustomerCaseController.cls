@@ -1,6 +1,6 @@
 public without sharing class CustomerCaseController {
   
-    @AuraEnabled(cacheable=true)
+    @AuraEnabled()
     public static List<Contact> getContact(String firstName, String lastName, String email){
         return [SELECT Id FROM Contact WHERE FirstName = :firstName AND LastName = :lastName AND Email = :email];
     }

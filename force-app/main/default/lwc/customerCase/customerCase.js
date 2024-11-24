@@ -27,7 +27,7 @@ export default class InputGuest extends LightningElement {
         try {
             contacts = await getContact({firstName: this.firstName, lastName: this.lastName, email: this.email})} 
         catch(error) {
-            this.dispatchEvent(new ShowToastEvent({title: 'ERROR', variant: 'error', message: error.message})); return false}
+            this.dispatchEvent(new ShowToastEvent({title: 'ERROR', variant: 'error', message: JSON.stringify(error)})); return false}
         
         if(contacts.length === 0){
             try {     

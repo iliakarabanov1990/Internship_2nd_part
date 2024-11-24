@@ -1,10 +1,10 @@
-import { LightningElement, track } from 'lwc';
+import { LightningElement } from 'lwc';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
 import getContact from '@salesforce/apex/CustomerCaseController.getContact';
 import createContact from '@salesforce/apex/CustomerCaseController.createContact';
 import createCase from '@salesforce/apex/CustomerCaseController.createCase';
 
-import { createRecord  } from 'lightning/uiRecordApi';
+import { createRecord, notifyRecordUpdateAvailable   } from 'lightning/uiRecordApi';
 
 import CASE_OBJECT from '@salesforce/schema/Case';
 import SUBJECT_FIELD from '@salesforce/schema/Case.Subject';
@@ -76,8 +76,8 @@ export default class InputGuest extends LightningElement {
         const caseRecordInput = {apiName: CASE_OBJECT.objectApiName, fields: caseFields};
 
         try {        
-            await createRecord(caseRecordInput);
-            //await createCase({subject: this.message, suppliedPhone: this.phone, suppliedEmail: this.email, contactId: this.contactId});
+            const caseObj = await createRecord(caseRecordInput);
+            notifyRecordUpdateAvailable([{recordId: caseObj.Id}]);
             this.dispatchEvent(new ShowToastEvent({title: 'Message Sent', variant: 'success'}))} 
         catch (error) {
             this.dispatchEvent(new ShowToastEvent({title: 'ERROR', variant: 'error', message: error.message}))}
