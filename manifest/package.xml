@@ -5,6 +5,7 @@
 		<members>CustomerCaseControllerTest</members>
 		<members>IncomingCallController</members>
 		<members>IncomingCallControllerTest</members>
+		<members>TestOrderTrigger</members>
 		<name>ApexClass</name>
 	</types>
 	<types>
@@ -22,7 +23,6 @@
 	</types>
 	<types>
 		<members>Customer_Case_Notification</members>
-		<members>Order_Count_Of_Account</members>
 		<members>Order_Count_Of_Account_On_Delete</members>
 		<name>Flow</name>
 	</types>

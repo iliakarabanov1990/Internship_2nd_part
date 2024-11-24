@@ -1,0 +1,19 @@
+<aura:component implements="force:appHostable">
+    <aura:attribute name="pnr" type="String"/>
+    <aura:attribute name="options" type="List" default="[	{'label': 'AURA', 'value': 'aura'},
+    														{'label': 'LWC', 'value': 'lwc'}]"/>
+    <aura:attribute name="value" type="String" default="aura"/>
+
+    <lightning:navigation aura:id="navService"/>
+    
+    <div class="slds-grid slds-grid_align-center">
+        <div class="slds-col slds-size_4-of-6">
+        	<lightning:input type="input" value="{!v.pnr}" title="pnr"/>
+            <div class="slds-grid slds-grid_align-end slds-var-m-top_small">
+              	<lightning:radioGroup name="radioGroup" options="{!v.options}" value="{!v.value}" type="button" class="slds-m-right_large"/>
+                <lightning:button variant="brand" label="Send pnr" title="{Send pnr}" onclick="{!c.handleCallPnr}"/>
+            </div>
+    	</div>
+    </div>
+  
+</aura:component>

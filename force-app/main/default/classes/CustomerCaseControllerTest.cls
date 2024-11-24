@@ -36,7 +36,7 @@ public class CustomerCaseControllerTest {
         Contact con = [SELECT Id FROM Contact LIMIT 1];
         
     	Test.startTest();
-           CustomerCaseController.createCase('Subject', 'Phobe', 'Email4@Email4.com', con.Id);
+           CustomerCaseController.createCase('Subject', 'Phone', 'Email4@Email4.com', con.Id);
     	Test.stopTest();
     
         Assert.areEqual(1, [SELECT Id FROM Case].size(), 'wrong size of returning cases');

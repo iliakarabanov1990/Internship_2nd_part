@@ -1,29 +1,28 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Flow xmlns="http://soap.sforce.com/2006/04/metadata">
     <apiVersion>62.0</apiVersion>
-    <assignments>
-        <name>Set_Count</name>
-        <label>Set Count</label>
-        <locationX>176</locationX>
-        <locationY>395</locationY>
-        <assignmentItems>
-            <assignToReference>OrderCount</assignToReference>
-            <operator>AssignCount</operator>
-            <value>
-                <elementReference>Get_Orders</elementReference>
-            </value>
-        </assignmentItems>
-        <assignmentItems>
-            <assignToReference>OrderCount</assignToReference>
-            <operator>Subtract</operator>
-            <value>
-                <numberValue>1.0</numberValue>
-            </value>
-        </assignmentItems>
-        <connector>
-            <targetReference>Update_Account</targetReference>
-        </connector>
-    </assignments>
+    <decisions>
+        <name>Is_Country_Target</name>
+        <label>Is Country Target</label>
+        <locationX>182</locationX>
+        <locationY>287</locationY>
+        <defaultConnectorLabel>NO</defaultConnectorLabel>
+        <rules>
+            <name>YES</name>
+            <conditionLogic>and</conditionLogic>
+            <conditions>
+                <leftValueReference>$Record.ShippingCountry</leftValueReference>
+                <operator>EqualTo</operator>
+                <rightValue>
+                    <elementReference>targetCountry</elementReference>
+                </rightValue>
+            </conditions>
+            <connector>
+                <targetReference>Order_Country</targetReference>
+            </connector>
+            <label>YES</label>
+        </rules>
+    </decisions>
     <environments>Default</environments>
     <interviewLabel>Order Count Of Account On Delete {!$Flow.CurrentDateTime}</interviewLabel>
     <label>Order Count Of Account On Delete</label>
@@ -46,66 +45,42 @@
         </value>
     </processMetadataValues>
     <processType>AutoLaunchedFlow</processType>
-    <recordLookups>
-        <name>Get_Orders</name>
-        <label>Get Orders</label>
-        <locationX>176</locationX>
-        <locationY>287</locationY>
-        <assignNullValuesIfNoRecordsFound>false</assignNullValuesIfNoRecordsFound>
-        <connector>
-            <targetReference>Set_Count</targetReference>
-        </connector>
-        <filterLogic>and</filterLogic>
-        <filters>
-            <field>AccountId</field>
-            <operator>EqualTo</operator>
-            <value>
-                <elementReference>$Record.Account.Id</elementReference>
-            </value>
-        </filters>
-        <filters>
-            <field>ShippingCountry</field>
-            <operator>EqualTo</operator>
-            <value>
-                <stringValue>USA</stringValue>
-            </value>
-        </filters>
-        <getFirstRecordOnly>false</getFirstRecordOnly>
-        <object>Order</object>
-        <storeOutputAutomatically>true</storeOutputAutomatically>
-    </recordLookups>
-    <recordUpdates>
-        <name>Update_Account</name>
-        <label>Update Account</label>
-        <locationX>176</locationX>
-        <locationY>503</locationY>
-        <filterLogic>and</filterLogic>
-        <filters>
-            <field>Id</field>
-            <operator>EqualTo</operator>
-            <value>
-                <elementReference>$Record.Account.Id</elementReference>
-            </value>
-        </filters>
-        <inputAssignments>
-            <field>OrderCount__c</field>
-            <value>
-                <elementReference>OrderCount</elementReference>
-            </value>
-        </inputAssignments>
-        <object>Account</object>
-    </recordUpdates>
     <start>
-        <locationX>50</locationX>
+        <locationX>56</locationX>
         <locationY>0</locationY>
         <connector>
-            <targetReference>Get_Orders</targetReference>
+            <targetReference>Is_Country_Target</targetReference>
         </connector>
         <object>Order</object>
         <recordTriggerType>Delete</recordTriggerType>
         <triggerType>RecordBeforeDelete</triggerType>
     </start>
     <status>Active</status>
+    <subflows>
+        <name>Order_Country</name>
+        <label>Order Country</label>
+        <locationX>50</locationX>
+        <locationY>395</locationY>
+        <flowName>Order_Count_For_Account_v_2</flowName>
+        <inputAssignments>
+            <name>accountId</name>
+            <value>
+                <elementReference>$Record.Account.Id</elementReference>
+            </value>
+        </inputAssignments>
+        <inputAssignments>
+            <name>isBeforeDelete</name>
+            <value>
+                <booleanValue>true</booleanValue>
+            </value>
+        </inputAssignments>
+        <inputAssignments>
+            <name>targetCountry</name>
+            <value>
+                <elementReference>targetCountry</elementReference>
+            </value>
+        </inputAssignments>
+    </subflows>
     <variables>
         <name>OrderCount</name>
         <dataType>Number</dataType>
@@ -115,6 +90,16 @@
         <scale>0</scale>
         <value>
             <numberValue>0.0</numberValue>
+        </value>
+    </variables>
+    <variables>
+        <name>targetCountry</name>
+        <dataType>String</dataType>
+        <isCollection>false</isCollection>
+        <isInput>true</isInput>
+        <isOutput>false</isOutput>
+        <value>
+            <stringValue>USA</stringValue>
         </value>
     </variables>
 </Flow>
