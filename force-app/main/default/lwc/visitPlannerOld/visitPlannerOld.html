@@ -1,0 +1,57 @@
+<template>
+    <lightning-card title="Invoices" icon-name="standard:drafts">
+        <div>
+            <div class="slds-p-bottom_small slds-grid slds-grid_align-spread">
+                <p style="margin: auto 0 auto 0;"><b>Total Records:</b> {totalRecords}</p>
+                <div class="slds-grid">
+                    <lightning-input type="search" label="Search" onchange={handleSearchChange} ></lightning-input>
+                    <!--<lightning-button label="Search" variant="brand" onclick={handleSearch} class="slds-p-left_small" style="margin-top:auto;"></lightning-button>-->
+                </div>  
+            </div>
+            <div style="height:380px;">     
+                <lightning-datatable
+                    key-field="Id"
+                    data={accounts}
+                    columns={columns}
+                    hide-checkbox-column
+                    show-row-number-column="true"
+                    sorted-by={sortByUI}
+                    sorted-direction={sortDirection}
+                    onsort={handleSort}
+                    row-number-offset={rowNumberOffset}>
+                </lightning-datatable>
+            </div>  
+            <template if:true={showBar}>
+                <div style="background: rgb(243, 243, 243);height:50px;margin-top:5px;">        
+                    <div class="slds-grid" style="height:4em;float: right;">
+                        <button class="slds-button slds-button_icon icon_button icon_button_disabled" title="First" role="first" onclick={handleFirst} disabled={first}>
+                            <svg viewBox="0 0 1024 1024" class="icon">
+                                <g><path d="M1024 1024 256 512 1024 0Z"  /><path d="M0 128l256 0 0 768-256 0 0-768Z"  /></g>
+                            </svg>  
+                        </button>
+                        <button class="slds-button slds-button_icon icon_button icon_button_disabled" title="Previous" role="previous" onclick={handlePrevious} disabled={first}>
+                            <svg viewBox="0 0 1024 1024" class="icon">
+                                <g><path d="M1024 1024 256 512 1024 0Z"  /></g>
+                            </svg>
+                        </button>
+                        <span class="vcenter currentpage">{currentPage}</span>
+                        <span class="vcenter" style="font-weight: 500;">&nbsp;/&nbsp;{totalPages}</span>
+                        <button class="slds-button slds-button_icon icon_button" title="Next" role="next" onclick={handleNext} disabled={last}>
+                            <svg viewBox="0 0 1024 1024" class="icon">
+                                <g><path d="M0 0 768 512 0 1024Z"  /></g>
+                            </svg>
+                        </button>
+                        <button class="slds-button slds-button_icon icon_button" title="Last" role="last" onclick={handleLast} disabled={last}>
+                            <svg viewBox="0 0 1024 1024" class="icon">
+                                <g><path d="M0 0 768 512 0 1024Z"  /><path d="M768 128l256 0 0 768-256 0 0-768Z"  /></g>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </template>   
+        </div>
+        <template if:true={isLoading}>
+            <lightning-spinner alternative-text="Loading"></lightning-spinner>
+        </template>
+    </lightning-card>         
+</template>
