@@ -4,7 +4,7 @@ import getContact from '@salesforce/apex/CustomerCaseController.getContact';
 import createContact from '@salesforce/apex/CustomerCaseController.createContact';
 import createCase from '@salesforce/apex/CustomerCaseController.createCase';
 
-import { createRecord, notifyRecordUpdateAvailable   } from 'lightning/uiRecordApi';
+import { createRecord, notifyRecordUpdateAvailable  } from 'lightning/uiRecordApi';
 
 import CASE_OBJECT from '@salesforce/schema/Case';
 import SUBJECT_FIELD from '@salesforce/schema/Case.Subject';
