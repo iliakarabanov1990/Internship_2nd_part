@@ -1,13 +1,10 @@
 import { LightningElement, api, wire } from 'lwc';
-import { encodeDefaultFieldValues } from "lightning/pageReferenceUtils";
-import { CurrentPageReference } from 'lightning/navigation';
-import { NavigationMixin } from "lightning/navigation";
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
+
 import addEvents from "@salesforce/apex/VisitPlannerController.addEvents";
 import sendEmails from "@salesforce/apex/VisitPlannerController.sendEmails";
 
-import { getRecords, getFieldValue } from 'lightning/uiRecordApi';
-
+import { getRecords } from 'lightning/uiRecordApi';
 import ACCOUNT_NAME_FIELD from "@salesforce/schema/Account.Name";
 
 
@@ -20,18 +17,14 @@ import visitPlanerOptionChoice from "@salesforce/label/c.VisitPlanerOptionChoice
 import visitPlanerCloseButton from "@salesforce/label/c.VisitPlanerCloseButton"; // Abbrechen // Cancel
 import visitPlanerAcceptButton from "@salesforce/label/c.VisitPlanerAcceptButton"; // Jetzt planen // Plan now
 
-
-
-
-//учесть таймзону https://salesforce.stackexchange.com/questions/284591/what-is-the-correct-approach-to-create-an-event-in-apex-for-another-user-with-th
-
-export default class VisitPlanner extends NavigationMixin(LightningElement) {
+export default class VisitPlanner extends LightningElement {
 
     @api accIds;
 
     wiredAccs;
 
     isOpenModal = true;
+    disableSave = false;
     isLoading = true;
     accsString= [];
 
@@ -39,19 +32,17 @@ export default class VisitPlanner extends NavigationMixin(LightningElement) {
     startDateHintVisible = false;
     optionsHintVisible = false;
 
-    startDate = new Date().toISOString();
-    option = 'calendarEntriesOnly';
-
+    startDate = new Date().toISOString().substring(0, 10);
+    optionChoice = 'calendarEntriesOnly';
 
     haderLabel = visitPlanerHeader;
     mainHintLabel = visitPlanerMainHint;
-    calendarEntriesOnly = visitPlanerCalendarEntriesOnly;
-    calendarEntriesAndEmail = visitPlanerCalendarEntriesAndEmail;
     startDateLabel = visitPlanerStartDate;
     optionChoiceLabel = visitPlanerOptionChoice;
     closeButtonLabel = visitPlanerCloseButton;
     acceptButtonLabel = visitPlanerAcceptButton;
-    optionChoiceValue = 'calendarEntriesOnly';
+    calendarEntriesOnly = visitPlanerCalendarEntriesOnly;
+    calendarEntriesAndEmail = visitPlanerCalendarEntriesAndEmail;
     
 
     get options() {
@@ -66,117 +57,87 @@ export default class VisitPlanner extends NavigationMixin(LightningElement) {
       accsDataMeth({error, data}) {
         if (data) {
             this.accsString = '';
-
             data.results.forEach(record => {
                 this.accsString += record.result.fields.Name.value + ', ';
             });
-
             this.mainHintLabel = this.mainHintLabel.replace('[x]', this.accsString.substring(0, this.accsString.length - 2));                
         } else if (error) {
-
-          console.log("error: ", error);
+            this.dispatchEvent(new ShowToastEvent({title: 'ERROR', variant: 'error', message: error.body.message}));   
         }
     }
     
-    connectedCallback() {
-        
+    connectedCallback() {     
         this.initLoad();
     }
 
-    /*get accs(){
-        console.log('test-strart');
-        console.dir(JSON.stringify(this.accIds));
-        console.log('test-strart');
-        return this.accIds;
-        
-    }*/
-
-    handleStartDateChange(event){
-        this.startDate = event.target.value;
-        this.operateInput(this.template.querySelector('[data-id="firstName-hint"]'), );
-    }
-
-    handleChangeOptionChoice(event){
-        this.option = event.target.value;
-        this.operateInput(this.template.querySelector('[data-id="firstName-hint"]'), );
+    handleChange(event){
+        this[event.target.name] = event.target.value;
+        this.operateInput(this.template.querySelector(`[data-id="${event.target.name}-hint"]`));
     }
 
     handleCloseButton(event){
-
-        //alert('cancel');
-
         window.history.back();
-        /*setTimeout(
-			function() {
-				window.history.back();
-			},
-			1000
-		);*/
-
-       // this.navigateToURL('standard__recordPage', {'recordId': this.accIds[0], actionName: "view"}); 
-
-        /*this[NavigationMixin.Navigate]({
-            type: "standard__objectPage",
-            attributes: {
-              objectApiName: "Account",
-              actionName: "list",
-            },
-            state: {
-              filterName: "Recent", 
-            },
-          });   */
     }
 
-    navigateToURL(type, attributes, state = {}) {   
-        this[NavigationMixin.Navigate]({
-            type,
-            attributes,
-            state,
-        });
-    }   
-
     async handleAcceptButton(event){
-        this.toggleSpinner(true);
+        
         if(this.errorsExist())      
             return;   
 
-        switch (expr) {
+        this.toggleSpinner(true);
+
+        switch (this.optionChoice) {
             case 'calendarEntriesOnly':
-                addEvents({startDateTime: this.startDate, accIds: this.accIds, isSendEmails: true})
-                .then(s=>console.log(s))
-                .catch(e=>console.log(e.getMessage()));
+                try{
+                    await addEvents({startDateTime: this.startDate, accIds: this.accIds});
+                    this.dispatchEvent(new ShowToastEvent({title: 'Events were added', variant: 'success'}));
+                    console.log('Events were added')}
+                catch(error){
+                    console.log(error.body.message);
+                    this.dispatchEvent(new ShowToastEvent({title: 'ERROR', variant: 'error', message: error.body.message}))}
                 break;
+
             case 'calendarEntriesAndEmail':
 
-                const eventsFromEvents = [];
+                let createdEventIds = [];
+
                 try{
-                    accsFromEvents = await addEvents({startDateTime: this.startDate, accIds: this.accIds, isSendEmails: true});}
+                    createdEventIds = await addEvents({startDateTime: this.startDate, accIds: this.accIds});
+                    this.dispatchEvent(new ShowToastEvent({title: 'Events were added', variant: 'success'}));
+                    console.log('Events were added')}
                 catch(error){
-                    this.dispatchEvent(new ShowToastEvent({title: 'ERROR', variant: 'error', message: error.message}));   
-                    return;}     
+                    console.log(error.message);
+                    this.dispatchEvent(new ShowToastEvent({title: 'ERROR', variant: 'error', message: error.body.message}))}    
                 
-                sendEmails({eventIds: eventsFromEvents, accIds: this.accIds});                   
+                try{
+                    sendEmails({eventIds: createdEventIds, accIds: this.accIds});
+                    this.dispatchEvent(new ShowToastEvent({title: 'Email were sent', variant: 'success'}));
+                    console.log('Email were sent')}
+                catch(error){
+                    console.log(error.body.message);
+                    this.dispatchEvent(new ShowToastEvent({title: 'ERROR', variant: 'error', message: error.body.message}))}   
+
                 break;
+
             default:
                 this.dispatchEvent(new ShowToastEvent({title: 'ERROR', variant: 'error', message: 'Firstly fill all needed fields!'}));
         }
 
+        this.disableSave = true;
+
         this.toggleSpinner(false); 
     }
 
-    async initLoad(pnr){
+    async initLoad(){
         this.toggleSpinner(true);
-        this.clearData(pnr);
-        //await this.getAccountsContacts({fields: 'PHONE FIELDS', searchString: this.pnr});
+        this.clearData();
         this.operateFirstLoad();
         this.toggleSpinner(false);
     }
 
     operateFirstLoad(){
-
         this.wiredAccs = [{recordIds: this.accIds, fields: [ACCOUNT_NAME_FIELD]}];
-        this.isOpenModal = true;
-        
+        this.isOpenModal = true;       
     }
 
     clearData(){
@@ -199,15 +160,12 @@ export default class VisitPlanner extends NavigationMixin(LightningElement) {
         return errorExist;
     }
 
-    operateInput(el, value){
-
-        if(!value) return;
+    operateInput(el){
 
         let errorExist = false;
-
         const hintName = el.getAttribute('data-id').replace('-hint', '');
         const elName = el.getAttribute('data-id').replace('-hint', '');
-        const hintBox = this.template.querySelector(`[data-id="${hintName}-hint-box"]`); 
+        const hintBox = this.template.querySelector(`[data-id="${hintName}-hint-box"]`);
         if(this[elName].trim()){  
             el.classList.add('slds-hidden'); 
             el.classList.remove('slds-show');              

@@ -15,45 +15,31 @@ public with sharing class VisitPlannerController {
     
 
     @AuraEnabled
-    public static List<Id> addEvents(Date startDateTime, List<Id> accIds, Boolean isSendEmails){
+    public static List<Id> addEvents(Date startDateTime, List<Id> accIds){
         
-
-        //не забыть про время начала и окончания у самих контрагентов
-
-
         userId = (Id)UserInfo.getUserId();
         accs = accIds;
         newEvents = new List<Event>();
-        Date currDay = startDateTime;
-        Date nextDay = currDay.addDays(1);
-
 
         checkOpeningHours();
+        setUserSettings();           
 
-        setUserSettings();      
-        
-        visitTimeMinets = getVisitTime();
-
-        addEventsForDay(currDay, newEvents);
-                                     
+        addEventsForDay(startDateTime);                                   
         insertEvents(newEvents);  
         
-
         return new List<Id>((new Map<Id, Event>(newEvents)).keySet());
     }
 
     @AuraEnabled
     public static void sendEmails(List<Id> eventIds, List<Id> accIds){
 
-        List<EmailTemplate> emailTempls = [SELECT Id, Subject, HtmlValue  FROM EmailTemplate WHERE DeveloperName = 'Visit_Email_Template_1733310669865'];
+        List<Messaging.SingleEmailMessage> messages = new List<Messaging.SingleEmailMessage>();
+        List<EmailTemplate> emailTempls = [SELECT Id, Subject, HtmlValue  FROM EmailTemplate WHERE DeveloperName = 'Visit_Email_Template_1733310669865' LIMIT 1];
         List<Event> events = [SELECT Id, WhatId, StartDateTime FROM Event WHERE Id IN :eventIds];
         Map<Id, Account> accounts = new Map<Id, Account>([SELECT (SELECT Id, Email FROM Contacts) FROM Account WHERE Id IN :accIds]);
 
         if(emailTempls.size() == 0)
             throw new AuraHandledException('Can not find email template!');
-
-        
-        List<Messaging.SingleEmailMessage> messages = new List<Messaging.SingleEmailMessage>();
 
         for(Event ev: events){
             messages.add(createEmail(ev, accounts.get(ev.WhatId), emailTempls[0]));
@@ -61,53 +47,26 @@ public with sharing class VisitPlannerController {
 
         Messaging.SendEmailResult[] messResalts = Messaging.sendEmail(messages, true);
 
-        for(Messaging.SendEmailResult res : messResalts){
-            if (!res.isSuccess()) 
-                throw new AuraHandledException(res.getErrors()[0].getMessage());
+        for(Messaging.SendEmailResult resMess : messResalts){
+            if (!resMess.isSuccess()) 
+                throw new AuraHandledException(resMess.getErrors()[0].getMessage());
         }
-
     }
 
     private static Messaging.SingleEmailMessage createEmail(Event ev, Account account, EmailTemplate emailTempl){
         
-
-        String body = emailTempl.HtmlValue;
-
-        body = body.replace('[EventDate]',  ev.StartDateTime.format()); 
-
-        List<String> bodies = new List<String>();
-        bodies.add(body);
-
-
-        /*List<String> toAddress = new List<String>();
-        toAddress.add(account.PersonEmail);
         Messaging.SingleEmailMessage mail = new Messaging.SingleEmailMessage();
-        mail.setTemplateId(emailTempl.Id);
-        mail.setToAddresses(toAddress);
+        List<String> bodies = new List<String>{emailTempl.HtmlValue.replace('[EventDate]',  ev.StartDateTime.format())};
+        List<String> toAddress = new List<String>{account.Contacts[0].Email};
         
-        //mail.setHtmlBody(body);
-        mail.setTargetObjectId(account.Contacts[0].Id);
-        mail.setWhatId(account.Id);
-        mail.setSaveAsActivity(false);
-        mail.setUseSignature(false); */
-        
-        Messaging.SingleEmailMessage mail = new Messaging.SingleEmailMessage();
-        List<String> toAddress = new List<String>();
-        toAddress.add(account.Contacts[0].Email);
-
         List<Messaging.RenderEmailTemplateBodyResult> renderResults = Messaging.renderEmailTemplate(account.Contacts[0].Id, ev.WhatId, bodies);
-        body = renderResults[0].getMergedBody();
 
         mail.setSubject('Besuchsankündigung Karo Pharma');
-        //mail.setTemplateId(emailTempl.Id);//'00XWU000008ZxOn2AK'); 
-        //mail.setTargetObjectId(account.Contacts[0].Id);//'003WU000007bdorYAA');
-        //mail.setWhatId(ev.WhatId);//'001WU00000TCpetYAD'); 
-        mail.setHtmlBody(body);
+        mail.setHtmlBody(renderResults[0].getMergedBody());
+        mail.setToAddresses(toAddress);
         mail.setBccSender(false); 
         mail.setUseSignature(false); 
-        mail.setSenderDisplayName('Card Division'); 
-        mail.setSaveAsActivity(false); 
-        mail.setToAddresses(toAddress);
+        mail.setSaveAsActivity(false);       
 
         return mail;
     }
@@ -117,11 +76,11 @@ public with sharing class VisitPlannerController {
         List<AggregateResult> opHours = [   SELECT Account__c, Count(Id)
                                             FROM OpeningHours__c 
                                             WHERE Account__c IN :accs 
-                                            //    AND Account__r.RecordType.Name = 'Person Account'
+                                                AND Account__r.RecordType.Name = 'Person Account'
                                             GROUP BY Account__c];
 
         if(opHours.size() < accs.size()) 
-            throw new AuraHandledException('Not all selected accounts have filled Opening Hours!');
+            throw new AuraHandledException('Not all selected accounts are person or have filled Opening Hours!');
     }
 
     private static void setUserSettings(){
@@ -138,24 +97,16 @@ public with sharing class VisitPlannerController {
         pauseBetweenVisitsInMinutes = userSettingsList[0].PauseBetweenVisitsInMinutes__c?.intValue();
         numberVisitsPerDay = userSettingsList[0].NumberVisitsPerDay__c?.intValue();
         defaultVisitDuration = userSettingsList[0].DefaultVisitDuration__c;
+
+        visitTimeMinets = getVisitTime();
     }
 
-    private static Integer getMinutesFromDecimal(Decimal timeDec){
-        Integer hours = timeDec.round(System.RoundingMode.DOWN).intValue();
-        return  hours * 60 + ((timeDec - hours) * 100).intValue();
-    }
-
-    private static void addEventsForDay(DateTime currDay, List<Event> newEvents){
+    private static void addEventsForDay(DateTime currDay){
 
         String dayOfWeek = currDay.format('EEEE');
         DateTime nextDay = currDay.addDays(1);
         Date day = Date.valueOf(currDay);
         Integer totalDaysEvents = 0;
-
-        if(dayOfWeek == 'Saturday' || dayOfWeek == 'Sunday'){
-            VisitPlannerController.addEventsForDay(nextDay, newEvents);  
-            return;
-        }
 
         List<OpeningHours__c> opHours = [   SELECT  Day_Of_Week__c, 
                                                     Preferred_Time__c,
@@ -168,22 +119,22 @@ public with sharing class VisitPlannerController {
                                                     Account__r.BillingCity 
                                             FROM OpeningHours__c 
                                             WHERE Account__c IN :accs 
-                                            //    AND Account__r.RecordType.Name = 'Person Account'
+                                                AND Account__r.RecordType.Name = 'Person Account'
                                                 AND Day_Of_Week__c = :dayOfWeek
                                             ORDER BY Opening_Time__c];
 
-        if(opHours.size() == 0){            
-            VisitPlannerController.addEventsForDay(nextDay, newEvents);
+        if(dayOfWeek == 'Saturday' || dayOfWeek == 'Sunday' || opHours.size() == 0){
+            addEventsForDay(nextDay);  
             return;
-        } 
+        }
 
         createBusyIntervals(currDay, nextDay);
         calculateFreeIntervals();
-        fillForAccounts(newEvents, opHours, day, totalDaysEvents, true);
-        fillForAccounts(newEvents, opHours, day, totalDaysEvents, false);
+        fillForAccounts(opHours, day, totalDaysEvents, true);
+        fillForAccounts(opHours, day, totalDaysEvents, false);
 
         if(accs.size() > 0)
-            VisitPlannerController.addEventsForDay(nextDay, newEvents);   
+            addEventsForDay(nextDay);   
     }
 
     private static void createBusyIntervals(DateTime currDay, DateTime nextDay){
@@ -195,38 +146,20 @@ public with sharing class VisitPlannerController {
                                     AND EndDateTime < :nextDay
                                 ORDER BY StartDateTime];
 
-       busyIntevals = new List<TimeInterval>();
-        
-        DateTime startT = getDateTimeFromTime(Date.valueOf(currDay), startOfUserDay);
-        DateTime endT = getDateTimeFromTime(Date.valueOf(currDay), endOfUserDay);
+        busyIntevals = new List<TimeInterval>();       
+        DateTime startTime = getDateTimeFromTime(Date.valueOf(currDay), startOfUserDay);
+        DateTime endTime = getDateTimeFromTime(Date.valueOf(currDay), endOfUserDay);
 
-        busyIntevals.add(new TimeInterval(startT, startT));
+        busyIntevals.add(new TimeInterval(startTime, startTime));
                
         for(Event ev : exsEvent){
             TimeInterval interval = new TimeInterval(ev.StartDateTime, ev.EndDateTime);
-            VisitPlannerController.findCrossedIntervals(exsEvent, interval);
+            findCrossedIntervals(exsEvent, interval);
             busyIntevals.add(interval);
         }
         
-        busyIntevals.add(new TimeInterval(endT, endT));
-    }
-
-    private static void insertBusyInterval(TimeInterval interval, Integer index){
-        busyIntevals.add(index, interval);
-    }
-
-    private static Integer getIndexOfBusyInteval(TimeInterval interval){
-
-
-        Integer indx = 0;
-        for(TimeInterval busyInt: busyIntevals){
-            if(busyInt.eventEnd <= interval.eventStart){
-                indx = busyIntevals.indexOf(busyInt);
-            }          
-        }
-        return indx;
-    }
-    
+        busyIntevals.add(new TimeInterval(endTime, endTime));
+    }   
 
     private static void calculateFreeIntervals(){
 
@@ -239,7 +172,7 @@ public with sharing class VisitPlannerController {
         }
     }
 
-    private static void fillForAccounts(List<Event> newEvents, List<OpeningHours__c> opHours, Date day, Integer totalDaysEvents, Boolean isOnlyPrefered){
+    private static void fillForAccounts(List<OpeningHours__c> opHours, Date day, Integer totalDaysEvents, Boolean isOnlyPrefered){
 
         for (Integer i = opHours.size() - 1; i >= 0 ; i--){     
             if(fillAccountInterval(opHours[i], day, totalDaysEvents, isOnlyPrefered))
@@ -251,7 +184,7 @@ public with sharing class VisitPlannerController {
 
         if(totalDaysEvents >= numberVisitsPerDay || (isOnlyPrefered && accHours.Preferred_Time__c == 0)) return false;
 
-        Integer intTime = accHours.Preferred_Time__c?.intValue();
+        Integer intTime = accHours.Preferred_Time__c.intValue();
         Datetime preferredTime = getDateTimeFromInteger(intTime, day);
 
         for(TimeInterval interval : freeIntevals){
@@ -261,7 +194,7 @@ public with sharing class VisitPlannerController {
             
             if(eventEnterval != null){
 
-                insertBusyInterval(eventEnterval, getIndexOfBusyInteval(eventEnterval)+1);
+                insertBusyInterval(eventEnterval, getIndexOfBusyInteval(eventEnterval) + 1);
                 calculateFreeIntervals();
                 
                 newEvents.add(createEvent(  accHours.Account__c, 
@@ -270,10 +203,8 @@ public with sharing class VisitPlannerController {
                                                 + (String.isBlank(accHours.Account__r.BillingPostalCode) ? accHours.Account__r.BillingPostalCode + ', ' : '')
                                                     + (String.isBlank(accHours.Account__r.BillingCity) ? accHours.Account__r.BillingCity + ', ' : ''),
                                             eventEnterval.eventStart, 
-                                            eventEnterval.eventEnd));
-                //interval.eventStart = eventEnd;          
+                                            eventEnterval.eventEnd));       
                 totalDaysEvents += 1;
-                //opHours.remove(i);
                 removeAccFromList(accHours.Account__c); 
 
                 return true;
@@ -308,21 +239,35 @@ public with sharing class VisitPlannerController {
 
         if(isOnlyPrefered){
             eventEnd = calculateEndTime(preferredTime);
-            if(VisitPlannerController.intervalEnoughToEvent(intevalEnd, eventEnd)){ 
-                eventInterval = new TimeInterval(preferredTime, eventEnd);//1
+            if(intervalEnoughToEvent(intevalEnd, eventEnd)){ 
+                eventInterval = new TimeInterval(preferredTime, eventEnd); //1
             }
             else{
                 eventStart = calculateStartTime(intevalEnd);
-                eventInterval = new TimeInterval(eventStart, intevalEnd);//2   
+                eventInterval = new TimeInterval(eventStart, intevalEnd); //2   
             }
         }
         else {              
-            eventInterval = new TimeInterval(intevalStrat, eventEnd);//3
+            eventInterval = new TimeInterval(intevalStrat, eventEnd); //3
         }
 
         return eventInterval;
     }
 
+    private static void insertBusyInterval(TimeInterval interval, Integer index){
+        busyIntevals.add(index, interval);
+    }
+
+    private static Integer getIndexOfBusyInteval(TimeInterval interval){
+
+        Integer indx = 0;
+        for(TimeInterval busyInt: busyIntevals){
+            if(busyInt.eventEnd <= interval.eventStart){
+                indx = busyIntevals.indexOf(busyInt);
+            }          
+        }
+        return indx;
+    }
 
     private static void removeAccFromList(Id toRemove){
         for(Integer i = accs.size() - 1; i >= 0; i--) {
@@ -381,6 +326,11 @@ public with sharing class VisitPlannerController {
         return DateTime.newInstance(day, Time.newInstance(hour, 0, 0, 0));    
     }
 
+    private static Integer getMinutesFromDecimal(Decimal timeDec){
+        Integer hours = timeDec.round(System.RoundingMode.DOWN).intValue();
+        return  hours * 60 + ((timeDec - hours) * 100).intValue();
+    }
+
     private static DateTime getDateTimeFromTime(Date day, Time tim){
         return DateTime.newInstance(day, tim);    
     }
@@ -405,45 +355,14 @@ public with sharing class VisitPlannerController {
         }
     }
 
-    private with sharing  class TimeInterval{
+    private with sharing class TimeInterval{
       
         public DateTime eventStart;
-        public DateTime eventEnd;
-        //public Boolean isClosed;
-        /*public Boolean isPreferredTime;
-        public DateTime preferredTime;*/
-        //private Date day;
-        
+        public DateTime eventEnd;  
 
-        public TimeInterval(DateTime eventStart, DateTime eventEnd){//, Integer preferredTime){
+        public TimeInterval(DateTime eventStart, DateTime eventEnd){
             this.eventStart = eventStart;
             this.eventEnd = eventEnd;
-            //day = eventStart.day();
-            //isClosed = false;
-            //this.TimeInterval(eventStart, eventEnd);//, DateTime.newInstance(day, Time.newInstance(preferredTime, 0, 0, 0)));
         }
-        
-        /*public TimeInterval(DateTime eventStart, DateTime eventEnd, DateTime preferredTime){
-            this.eventStart = eventStart;
-            this.eventEnd = eventEnd;
-            this.preferredTime = preferredTime;
-            checkPreferredTime();
-        }*/
-        
-
-        /*private Boolean checkPreferredTime(){
-            this.isPreferredTime = false;
-            if(this.eventStart <= preferredTime && preferredTime <= this.eventEnd){
-                this.preferredTime = true;
-            }
-        }*/
-        public Boolean isTimeInsideInterval(Datetime startToCheck, Datetime endToCheck){
-            if(startToCheck >= this.eventStart && startToCheck <= this.eventEnd
-                    && endToCheck >= this.eventStart && endToCheck <= this.eventEnd){
-                return true;
-            }
-            return false;
-        }
-    }
-    
+    } 
 }
