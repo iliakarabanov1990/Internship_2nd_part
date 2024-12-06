@@ -1,8 +1,27 @@
-import { LightningElement, api } from 'lwc';
+import { LightningElement, api, wire } from 'lwc';
 import { encodeDefaultFieldValues } from "lightning/pageReferenceUtils";
 import { CurrentPageReference } from 'lightning/navigation';
 import { NavigationMixin } from "lightning/navigation";
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
+import addEvents from "@salesforce/apex/VisitPlannerController.addEvents";
+import sendEmails from "@salesforce/apex/VisitPlannerController.sendEmails";
+
+import { getRecords, getFieldValue } from 'lightning/uiRecordApi';
+
+import ACCOUNT_NAME_FIELD from "@salesforce/schema/Account.Name";
+
+
+import visitPlanerCalendarEntriesOnly from "@salesforce/label/c.VisitPlanerCalendarEntriesOnly";//Nur Kalendereinträge //Calendar entries only
+import visitPlanerCalendarEntriesAndEmail from "@salesforce/label/c.VisitPlanerCalendarEntriesAndEmail";//Kalendereinträge + E-Mail // Calendar entries + email
+import visitPlanerHeader from "@salesforce/label/c.VisitPlanerHeader"; // Besuche planen // Plan visits
+import visitPlanerMainHint from "@salesforce/label/c.VisitPlanerMainHint"; //Sie haben [x] zur Planung ausgewählt. Bitte hier die Planungsdetails auswahlen //  You have selected [x] for planning. Please select the planning details here
+import visitPlanerStartDate from "@salesforce/label/c.VisitPlanerStartDate"; // An welchem Tag sollen die Besuche geplant werden? //  On which day should the visits be planned?
+import visitPlanerOptionChoice from "@salesforce/label/c.VisitPlanerOptionChoice"; // Planungsauswahl //Planning selection
+import visitPlanerCloseButton from "@salesforce/label/c.VisitPlanerCloseButton"; // Abbrechen // Cancel
+import visitPlanerAcceptButton from "@salesforce/label/c.VisitPlanerAcceptButton"; // Jetzt planen // Plan now
+
+
+
 
 //учесть таймзону https://salesforce.stackexchange.com/questions/284591/what-is-the-correct-approach-to-create-an-event-in-apex-for-another-user-with-th
 
@@ -10,16 +29,12 @@ export default class VisitPlanner extends NavigationMixin(LightningElement) {
 
     @api accIds;
 
+    wiredAccs;
+
     isOpenModal = true;
     isLoading = true;
-    headerLabel = 'This is header';
-    mainHintLabel = 'This is main hint';
-    calendarEntriesOnlyLabel = 'Calendar entries only';
-    sendEmailOnlyLabel = 'Send email only';
-    calendarEntriesAndEmailLabel = 'Calendar entries + email';
-    startDateLabel = 'Start date';
-    closeButtonLabel = 'Close';
-    acceptButtonLabel = 'Accept';
+    accsString= [];
+
 
     startDateHintVisible = false;
     optionsHintVisible = false;
@@ -27,13 +42,44 @@ export default class VisitPlanner extends NavigationMixin(LightningElement) {
     startDate = new Date().toISOString();
     option = 'calendarEntriesOnly';
 
-    options = [
-        { label: this.calendarEntriesOnlyLabel, value: 'calendarEntriesOnly' },
-        { label: this.sendEmailOnlyLabel, value: 'sendEmailOnly' },
-        { label: this.calendarEntriesAndEmailLabel, value: 'calendarEntriesAndEmail' },
-    ];
 
+    haderLabel = visitPlanerHeader;
+    mainHintLabel = visitPlanerMainHint;
+    calendarEntriesOnly = visitPlanerCalendarEntriesOnly;
+    calendarEntriesAndEmail = visitPlanerCalendarEntriesAndEmail;
+    startDateLabel = visitPlanerStartDate;
+    optionChoiceLabel = visitPlanerOptionChoice;
+    closeButtonLabel = visitPlanerCloseButton;
+    acceptButtonLabel = visitPlanerAcceptButton;
+    optionChoiceValue = 'calendarEntriesOnly';
+    
+
+    get options() {
+        return [
+        { label: this.calendarEntriesOnly, value: 'calendarEntriesOnly'},
+        //{ label: this.sendEmailOnlyLabel, value: 'sendEmailOnly' },
+        { label: this.calendarEntriesAndEmail, value: 'calendarEntriesAndEmail'},
+        ];
+    }
+
+    @wire(getRecords, {records: "$wiredAccs"})
+      accsDataMeth({error, data}) {
+        if (data) {
+            this.accsString = '';
+
+            data.results.forEach(record => {
+                this.accsString += record.result.fields.Name.value + ', ';
+            });
+
+            this.mainHintLabel = this.mainHintLabel.replace('[x]', this.accsString.substring(0, this.accsString.length - 2));                
+        } else if (error) {
+
+          console.log("error: ", error);
+        }
+    }
+    
     connectedCallback() {
+        
         this.initLoad();
     }
 
@@ -56,6 +102,10 @@ export default class VisitPlanner extends NavigationMixin(LightningElement) {
     }
 
     handleCloseButton(event){
+
+        //alert('cancel');
+
+        window.history.back();
         /*setTimeout(
 			function() {
 				window.history.back();
@@ -63,7 +113,9 @@ export default class VisitPlanner extends NavigationMixin(LightningElement) {
 			1000
 		);*/
 
-        this[NavigationMixin.Navigate]({
+       // this.navigateToURL('standard__recordPage', {'recordId': this.accIds[0], actionName: "view"}); 
+
+        /*this[NavigationMixin.Navigate]({
             type: "standard__objectPage",
             attributes: {
               objectApiName: "Account",
@@ -72,15 +124,44 @@ export default class VisitPlanner extends NavigationMixin(LightningElement) {
             state: {
               filterName: "Recent", 
             },
-          });       
+          });   */
     }
 
-    handleAcceptButton(event){
-        if(!this.errorsExist()){
-            /*this.disableSave = true;
-            const isSent = await this.sendData();      
-            this.disableSave = isSent;*/
-        } 
+    navigateToURL(type, attributes, state = {}) {   
+        this[NavigationMixin.Navigate]({
+            type,
+            attributes,
+            state,
+        });
+    }   
+
+    async handleAcceptButton(event){
+        this.toggleSpinner(true);
+        if(this.errorsExist())      
+            return;   
+
+        switch (expr) {
+            case 'calendarEntriesOnly':
+                addEvents({startDateTime: this.startDate, accIds: this.accIds, isSendEmails: true})
+                .then(s=>console.log(s))
+                .catch(e=>console.log(e.getMessage()));
+                break;
+            case 'calendarEntriesAndEmail':
+
+                const eventsFromEvents = [];
+                try{
+                    accsFromEvents = await addEvents({startDateTime: this.startDate, accIds: this.accIds, isSendEmails: true});}
+                catch(error){
+                    this.dispatchEvent(new ShowToastEvent({title: 'ERROR', variant: 'error', message: error.message}));   
+                    return;}     
+                
+                sendEmails({eventIds: eventsFromEvents, accIds: this.accIds});                   
+                break;
+            default:
+                this.dispatchEvent(new ShowToastEvent({title: 'ERROR', variant: 'error', message: 'Firstly fill all needed fields!'}));
+        }
+
+        this.toggleSpinner(false); 
     }
 
     async initLoad(pnr){
@@ -92,7 +173,10 @@ export default class VisitPlanner extends NavigationMixin(LightningElement) {
     }
 
     operateFirstLoad(){
+
+        this.wiredAccs = [{recordIds: this.accIds, fields: [ACCOUNT_NAME_FIELD]}];
         this.isOpenModal = true;
+        
     }
 
     clearData(){
