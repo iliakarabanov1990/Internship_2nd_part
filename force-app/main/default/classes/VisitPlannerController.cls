@@ -12,14 +12,19 @@ public with sharing class VisitPlannerController {
     static Integer numberVisitsPerDay;
     static Decimal defaultVisitDuration; 
     static List<Event> newEvents;
+    static DateTime todayTime;
     
 
     @AuraEnabled
     public static List<Id> addEvents(Date startDateTime, List<Id> accIds){
+
+        if(accIds.size() == 0)
+            throw new AuraHandledException('First of all you need to choose Accounts!');
         
         userId = (Id)UserInfo.getUserId();
-        accs = accIds;
+        accs = accIds.clone();
         newEvents = new List<Event>();
+        todayTime = System.now();
 
         checkOpeningHours();
         setUserSettings();           
@@ -36,7 +41,7 @@ public with sharing class VisitPlannerController {
         List<Messaging.SingleEmailMessage> messages = new List<Messaging.SingleEmailMessage>();
         List<EmailTemplate> emailTempls = [SELECT Id, Subject, HtmlValue  FROM EmailTemplate WHERE DeveloperName = 'Visit_Email_Template_1733310669865' LIMIT 1];
         List<Event> events = [SELECT Id, WhatId, StartDateTime FROM Event WHERE Id IN :eventIds];
-        Map<Id, Account> accounts = new Map<Id, Account>([SELECT (SELECT Id, Email FROM Contacts) FROM Account WHERE Id IN :accIds]);
+        Map<Id, Account> accounts = new Map<Id, Account>([SELECT PersonEmail FROM Account WHERE Id IN :accIds]);
 
         if(emailTempls.size() == 0)
             throw new AuraHandledException('Can not find email template!');
@@ -57,9 +62,11 @@ public with sharing class VisitPlannerController {
         
         Messaging.SingleEmailMessage mail = new Messaging.SingleEmailMessage();
         List<String> bodies = new List<String>{emailTempl.HtmlValue.replace('[EventDate]',  ev.StartDateTime.format())};
-        List<String> toAddress = new List<String>{account.Contacts[0].Email};
+
         
-        List<Messaging.RenderEmailTemplateBodyResult> renderResults = Messaging.renderEmailTemplate(account.Contacts[0].Id, ev.WhatId, bodies);
+        List<String> toAddress = new List<String>{account.PersonEmail};
+
+        List<Messaging.RenderEmailTemplateBodyResult> renderResults = Messaging.renderEmailTemplate(ev.WhatId, ev.WhatId, bodies);  
 
         mail.setSubject('Besuchsankündigung Karo Pharma');
         mail.setHtmlBody(renderResults[0].getMergedBody());
@@ -149,6 +156,8 @@ public with sharing class VisitPlannerController {
         busyIntevals = new List<TimeInterval>();       
         DateTime startTime = getDateTimeFromTime(Date.valueOf(currDay), startOfUserDay);
         DateTime endTime = getDateTimeFromTime(Date.valueOf(currDay), endOfUserDay);
+
+        if(todayTime > startTime) startTime = todayTime;
 
         busyIntevals.add(new TimeInterval(startTime, startTime));
                

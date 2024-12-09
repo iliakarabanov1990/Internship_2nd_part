@@ -20,7 +20,6 @@ import visitPlanerAcceptButton from "@salesforce/label/c.VisitPlanerAcceptButton
 export default class VisitPlanner extends LightningElement {
 
     @api accIds;
-
     wiredAccs;
 
     isOpenModal = true;
@@ -28,12 +27,12 @@ export default class VisitPlanner extends LightningElement {
     isLoading = true;
     accsString= [];
 
-
     startDateHintVisible = false;
     optionsHintVisible = false;
 
     startDate = new Date().toISOString().substring(0, 10);
-    optionChoice = 'calendarEntriesOnly';
+    today = this.startDate;
+    optionChoice = 'calendarEntriesOnly'; 
 
     haderLabel = visitPlanerHeader;
     mainHintLabel = visitPlanerMainHint;
@@ -107,7 +106,11 @@ export default class VisitPlanner extends LightningElement {
                     console.log('Events were added')}
                 catch(error){
                     console.log(error.message);
-                    this.dispatchEvent(new ShowToastEvent({title: 'ERROR', variant: 'error', message: error.body.message}))}    
+                    this.dispatchEvent(new ShowToastEvent({title: 'ERROR', variant: 'error', message: error.body.message}))
+                    this.disableSave = true;
+                    this.toggleSpinner(false);
+                    return;
+                }    
                 
                 try{
                     sendEmails({eventIds: createdEventIds, accIds: this.accIds});
@@ -124,7 +127,6 @@ export default class VisitPlanner extends LightningElement {
         }
 
         this.disableSave = true;
-
         this.toggleSpinner(false); 
     }
 
