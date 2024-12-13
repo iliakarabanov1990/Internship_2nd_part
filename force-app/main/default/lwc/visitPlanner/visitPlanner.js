@@ -17,6 +17,10 @@ import visitPlanerOptionChoice from "@salesforce/label/c.VisitPlanerOptionChoice
 import visitPlanerCloseButton from "@salesforce/label/c.VisitPlanerCloseButton"; // Abbrechen // Cancel
 import visitPlanerAcceptButton from "@salesforce/label/c.VisitPlanerAcceptButton"; // Jetzt planen // Plan now
 
+
+
+
+
 export default class VisitPlanner extends LightningElement {
 
     @api accIds;
@@ -33,6 +37,7 @@ export default class VisitPlanner extends LightningElement {
     startDate = new Date().toISOString().substring(0, 10);
     today = this.startDate;
     optionChoice = 'calendarEntriesOnly'; 
+    accsString = '';
 
     haderLabel = visitPlanerHeader;
     mainHintLabel = visitPlanerMainHint;
@@ -42,6 +47,7 @@ export default class VisitPlanner extends LightningElement {
     acceptButtonLabel = visitPlanerAcceptButton;
     calendarEntriesOnly = visitPlanerCalendarEntriesOnly;
     calendarEntriesAndEmail = visitPlanerCalendarEntriesAndEmail;
+    successfullyCreatedLabel = 'Die Termine für die ausgewählten {0} Kunden wurden erfolgreich erstellt. Gehen Sie {1} zu ihrem Kalender';
     
 
     get options() {
@@ -53,14 +59,19 @@ export default class VisitPlanner extends LightningElement {
     }
 
     @wire(getRecords, {records: "$wiredAccs"})
-      accsDataMeth({error, data}) {
-        if (data) {
-            this.accsString = '';
+      accsDataMeth({error, data}){
+        this.accsString = '';
+        if(data) {           
             data.results.forEach(record => {
                 this.accsString += record.result.fields.Name.value + ', ';
             });
-            this.mainHintLabel = this.mainHintLabel.replace('[x]', this.accsString.substring(0, this.accsString.length - 2));                
-        } else if (error) {
+            if(this.accsString === '') {
+                this.mainHintLabel = 'First of all you need to choose Accounts!';
+            }
+            else {
+                this.mainHintLabel = this.mainHintLabel.replace('[x]', this.accsString.substring(0, this.accsString.length - 2));  
+            }              
+        } else if(error) {
             this.dispatchEvent(new ShowToastEvent({title: 'ERROR', variant: 'error', message: error.body.message}));   
         }
     }
@@ -80,8 +91,12 @@ export default class VisitPlanner extends LightningElement {
 
     async handleAcceptButton(event){
         
-        if(this.errorsExist())      
-            return;   
+        if(this.errorsExist()) { return }     
+
+        if(this.accIds.length === 0) {
+            this.dispatchEvent(new ShowToastEvent({title: 'ERROR', variant: 'error', message: 'There are not chosen accounts!'}));
+            return;
+        }                 
 
         this.toggleSpinner(true);
 
@@ -89,8 +104,11 @@ export default class VisitPlanner extends LightningElement {
             case 'calendarEntriesOnly':
                 try{
                     await addEvents({startDateTime: this.startDate, accIds: this.accIds});
-                    this.dispatchEvent(new ShowToastEvent({title: 'Events were added', variant: 'success'}));
-                    console.log('Events were added')}
+                    this.dispatchEvent(new ShowToastEvent({
+                        title: this.successfullyCreatedLabel,
+                        variant: 'success',
+                        messageData: [this.accsString, {url: '/lightning/o/Event/home', label: 'hier'}]
+                    }))}
                 catch(error){
                     console.log(error.body.message);
                     this.dispatchEvent(new ShowToastEvent({title: 'ERROR', variant: 'error', message: error.body.message}))}
@@ -102,8 +120,11 @@ export default class VisitPlanner extends LightningElement {
 
                 try{
                     createdEventIds = await addEvents({startDateTime: this.startDate, accIds: this.accIds});
-                    this.dispatchEvent(new ShowToastEvent({title: 'Events were added', variant: 'success'}));
-                    console.log('Events were added')}
+                    this.dispatchEvent(new ShowToastEvent({
+                        title: this.successfullyCreatedLabel,
+                        variant: 'success',
+                        messageData: [this.accsString, {url: '/lightning/o/Event/home', label: 'hier'}]
+                    }))}
                 catch(error){
                     console.log(error.message);
                     this.dispatchEvent(new ShowToastEvent({title: 'ERROR', variant: 'error', message: error.body.message}))
@@ -156,7 +177,7 @@ export default class VisitPlanner extends LightningElement {
         const hints = this.template.querySelectorAll('[data-name="error-hint"]');
         hints.forEach(el => {
             const errEx = this.operateInput(el);
-            if(errEx) errorExist = true;
+            if(errEx) { errorExist = true }
         });
 
         return errorExist;
@@ -164,16 +185,17 @@ export default class VisitPlanner extends LightningElement {
 
     operateInput(el){
 
+        //переписать на параметры
         let errorExist = false;
         const hintName = el.getAttribute('data-id').replace('-hint', '');
         const elName = el.getAttribute('data-id').replace('-hint', '');
         const hintBox = this.template.querySelector(`[data-id="${hintName}-hint-box"]`);
-        if(this[elName].trim()){  
+        if(this[elName].trim()) {  
             el.classList.add('slds-hidden'); 
             el.classList.remove('slds-show');              
             hintBox.classList.remove("slds-has-error");
         }
-        else{
+        else {
             el.classList.remove('slds-hidden'); 
             el.classList.add('slds-show');
             hintBox.classList.add("slds-has-error");

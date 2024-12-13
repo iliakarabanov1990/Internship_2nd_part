@@ -16,6 +16,11 @@
 		<members>*</members>
 		<name>ApexTrigger</name>
 	</types>
+
+	<types>
+		<members>*</members>
+		<name>ApexPage</name>
+	</types>
 	<types>
 		<members>CTI_Emulator</members>
 		<members>incomingCall</members>

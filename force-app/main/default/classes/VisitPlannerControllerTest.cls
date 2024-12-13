@@ -26,7 +26,7 @@ private class VisitPlannerControllerTest {
                 Account__c = acc.Id));            
         }
            
-            insert opHours;
+        insert opHours;
     }
 
     @isTest

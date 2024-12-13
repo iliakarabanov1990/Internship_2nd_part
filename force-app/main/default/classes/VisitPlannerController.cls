@@ -1,50 +1,289 @@
 public with sharing class VisitPlannerController {
 
-    static Id userId;
-    static Integer visitTimeMinets;
-    static List<Id> accs;
-    static List<TimeInterval> freeIntevals;
-    static List<TimeInterval> busyIntevals;
 
-    static Time startOfUserDay;
-    static Time endOfUserDay;
-    static Integer pauseBetweenVisitsInMinutes; 
-    static Integer numberVisitsPerDay;
-    static Decimal defaultVisitDuration; 
-    static List<Event> newEvents;
-    static DateTime todayTime;
-    
+    //правки:
+    //1. User_moode и chema.SObjectType..isCreateable() добавлены
+    //2. Методы применяю только там где есть повторяющий код, или есть вложенные циклы (так как это бестрактис для apex)
+    //      было 26! методов для создания визитовб стало 6!
+    //3. Убрал внутренний класс и заменил его на Map<String, DateTime>
+    //4. Убрал поля класса и заменил их переменными метода
+    //5. Убрал последовательный вызов методов, которые ничего не получали и ничего не возвращали на, по возможности, чистые функции
+    //6. Использовал Database методов вместо try insert catch, обработал результат
+    //7. Использовал if(condition) { behavior; } 
+    //8. Удалил __test__ папку из LWC
+
+    // Visit Scheduling
+    //АЛГОРИТМ
+    //1. Рекурсивно берем день за днем начиная с заданного пользователем, и распределяем визиты во все свободные места, до тех пор пока не распределим
+    //2. Для каждого дня:
+        //2.1. Идем по всем аккаунтам, которые еще не распределены (по факту перебираем OpeningHours для дня недели)
+            //2.1.1.1. Сначала мы пытаемся распределить визиты с учетом предпочтительного времени, которое указал аккаунт
+            //2.1.1.2. Заполняем все оставшееся время оставшимися не распределенными визитами
+                // Так и не придумал алгоритм на Map<> или State Patern, которые бы не катастрафически сильно не снижали производительность (хотя передача флага своего рода State Patern, когда не используем обекты)
+    //3. Если остались нераспреденные аккаунты переходим к следующему буднему дню и все начинаем с п.1
 
     @AuraEnabled
     public static List<Id> addEvents(Date startDateTime, List<Id> accIds){
 
-        if(accIds.size() == 0)
-            throw new AuraHandledException('First of all you need to choose Accounts!');
-        
-        userId = (Id)UserInfo.getUserId();
-        accs = accIds.clone();
-        newEvents = new List<Event>();
-        todayTime = System.now();
+        List<Event> newEvents = new List<Event>();
+        Map<String, Object> userSettings = new Map<String, Object>();
 
-        checkOpeningHours();
-        setUserSettings();           
+        //insert events with visits     
+        if(!Schema.SObjectType.Event.isCreateable()) { throw new VisitPlannerControllerException('You don\'t have perpission to create events!'); }
 
-        addEventsForDay(startDateTime);                                   
-        insertEvents(newEvents);  
+        //check opening hours
+        List<AggregateResult> opHoursCheck = [   SELECT Account__c, Count(Id)
+                                            FROM OpeningHours__c 
+                                            WHERE Account__c IN :accIds 
+                                                AND Account__r.RecordType.Name = 'Person Account'
+                                            WITH USER_MODE
+                                            GROUP BY Account__c];
+
+        if(opHoursCheck.size() < accIds.size()) { throw new VisitPlannerControllerException('Not all selected accounts are person or have filled Opening Hours!'); }
+           
+        List<OpeningHours__c> opHours = [  SELECT
+                                                Day_Of_Week__c, 
+                                                Preferred_Time__c,
+                                                Opening_Time__c,
+                                                Closing_Time__c,
+                                                Account__c,
+                                                Account__r.Name,
+                                                Account__r.BillingStreet, 
+                                                Account__r.BillingPostalCode, 
+                                                Account__r.BillingCity 
+                                        FROM OpeningHours__c 
+                                        WHERE Account__c IN :accIds
+                                        WITH USER_MODE
+                                        ORDER BY Opening_Time__c];
+
+        //get user settings of visits  
+        List<User> userSettingsList = [ SELECT 
+                                            StartOfDay__c, 
+                                            EndOfDay__c,
+                                            PauseBetweenVisitsInMinutes__c,
+                                            DefaultVisitDuration__c,
+                                            NumberVisitsPerDay__c 
+                                        FROM User                                       
+                                        WHERE Id = :UserInfo.getUserId()
+                                        WITH USER_MODE];
+
+        if(userSettingsList.size() == 0) { throw new VisitPlannerControllerException('User is not configured, please contact your administrator'); }
+
+        User userEl = userSettingsList[0];
+        Integer visitHours = userEl.DefaultVisitDuration__c.round(System.RoundingMode.DOWN).intValue();
+
+        userSettings.put('id', userEl.Id);
+        userSettings.put('startOfDay', userEl.StartOfDay__c);
+        userSettings.put('endOfDay', userEl.EndOfDay__c);
+        userSettings.put('pauseBetweenVisitsInMinutes', userEl.PauseBetweenVisitsInMinutes__c == null ? 0 : userEl.PauseBetweenVisitsInMinutes__c);
+        userSettings.put('visitTimeMinets', visitHours * 60 + (userEl.DefaultVisitDuration__c.intValue() - visitHours) * 100);
+        userSettings.put('numberVisitsPerDay', userEl.NumberVisitsPerDay__c);      
         
+
+        //get all events
+        //because if we got events for each next day it would be loop in loop
+        //theoretically it may be not efficient, if user has really big busy future schedule
+        // but it is better than loop in loop
+
+        List<Event> plannedEvents = [SELECT StartDateTime, EndDateTime
+                                    FROM Event 
+                                    WHERE OwnerId = :userEl.Id
+                                    WITH USER_MODE
+                                    ORDER BY StartDateTime, EndDateTime];
+        
+      
+                                    
+        // locate visits from day to day  by recurtion
+        newEvents.addAll(addEventsForDay(startDateTime, opHours, plannedEvents, userSettings, accIds.size(), new List<id>()));
+
+        
+        List<Database.SaveResult> srList = Database.insert(newEvents, true, AccessLevel.USER_MODE);
+        String errorMessge = '';    
+        for (Database.SaveResult sr : srList) {           
+            if (!sr.isSuccess()) {              
+                for(Database.Error err : sr.getErrors()) { errorMessge += (err.getStatusCode() + ': ' + err.getMessage()) + '\r\n'; }
+            }        
+        }        
+        if(errorMessge != '') { throw new VisitPlannerControllerException(errorMessge.left(errorMessge.length() - 2)); }
+
+
         return new List<Id>((new Map<Id, Event>(newEvents)).keySet());
     }
 
+    private static List<Event> addEventsForDay(DateTime currDay, List<OpeningHours__c> opHours, List<Event> plannedEvents, Map<String, Object> userSettings, Integer countAcc, List<Id> operatedAccs) {
+
+        //we consider day by day because the locate algorithm is quite sophisticated.
+  
+        //get all busy inteval in curr day, it will be needed to get free intervals
+        List<Event> dayEvents = new List<Event>();
+        List<Event> newEvents = new List<Event>();
+        List<Map<String, Datetime>> busyIntevals = new List<Map<String, Datetime>>();
+        List<Map<String, Datetime>> freeIntevals = new List<Map<String, Datetime>>();
+       
+        String dayOfWeek = currDay.format('EEEE');
+        Datetime nextDay = currDay.addDays(1);
+        Date day = Date.valueOf(currDay);
+        Integer totalDaysEvents = 0; // we can't exceed max events per day for user
+        Datetime startTime = Datetime.newInstance(day, (Time)userSettings.get('startOfDay')); 
+        DateTime now = System.now();
+        if(startTime < now) { startTime = now; }// it can be today in the middle of day, so cut previous part of day
+        Datetime endTime = Datetime.newInstance(day, (Time)userSettings.get('endOfDay'));
+
+        if(dayOfWeek != 'Saturday' && dayOfWeek != 'Sunday') {  
+            
+            // we need boarders of user work day for create later free intevals
+            busyIntevals.add(new Map<String, DateTime>{'eventStart' => startTime, 'eventEnd' => startTime});              
+            for(Event ev : plannedEvents) {             
+                if(ev.StartDateTime < startTime) { continue; }
+                if(ev.StartDateTime >= endTime) { break; }
+                //search for intersecting intevals and add only full big busy intervals
+                //оставляю инкапсуляцию findLastDateCrossedIntervals, так как по бестпрактис for в for нежелательны и их нужно выносить в отдельную функцию, 
+                Map<String, DateTime> interval = new Map<String, DateTime>{'eventStart' => ev.StartDateTime, 'eventEnd' => findLastDateCrossedIntervals(plannedEvents, ev.EndDateTime)};
+                busyIntevals.add(interval);
+            }      
+            busyIntevals.add(new Map<String, DateTime>{'eventStart' => endTime, 'eventEnd' => endTime});
+
+            // from busy intervals calculate free intervals
+            for(Integer i = 0; i < busyIntevals.size(); i++) {
+                if(busyIntevals.size() > i + 1){
+                    freeIntevals.add(new Map<String, DateTime>{'eventStart' => busyIntevals[i].get('eventEnd'), 'eventEnd' => busyIntevals[i + 1].get('eventStart')});
+                }
+            }
+
+            //first of all find intevals, whene we can sheduale visits in prefered times
+            dayEvents.addAll(createEventsForDay(opHours, day, dayOfWeek, freeIntevals, operatedAccs, userSettings, totalDaysEvents, true));
+            //then locate at all, wich was not lacoted
+            dayEvents.addAll(createEventsForDay(opHours, day, dayOfWeek, freeIntevals, operatedAccs, userSettings, totalDaysEvents, false));
+        }
+
+        if(operatedAccs.size() < countAcc){ dayEvents.addAll(addEventsForDay(nextDay, opHours, plannedEvents, userSettings, countAcc, operatedAccs)); } 
+            
+        return dayEvents;
+    }
+
+    private static List<Event> createEventsForDay(List<OpeningHours__c> opHours, Date day, String dayOfWeek, List<Map<String, Datetime>> freeIntevals, List<Id> operatedAccs, Map<String, Object> userSettings, Integer totalDaysEvents,  Boolean isOnlyPrefered) {
+          
+        List<Event> dayEvents = new List<Event>();
+        Event newEvent;
+        Decimal numberVisitsPerDay = (Decimal)userSettings.get('numberVisitsPerDay');
+        
+        for(OpeningHours__c openingHours : opHours) {    
+            if(totalDaysEvents >= numberVisitsPerDay) { break; }
+            if(!operatedAccs.contains(openingHours.Account__c) && openingHours.Day_Of_Week__c == dayOfWeek) {  
+                
+                //оставляю этот метод потому что по бестпрктис цикл в циклне - нельзя
+                //а там мне приедся пройтись по свободным интервалам и определить подходит ли он для заполнения, заполнить пересчитать свободный интервал
+                newEvent = createEventForDayForAccount(openingHours, day, freeIntevals, userSettings, isOnlyPrefered);
+                
+                if(newEvent != null) { 
+                    dayEvents.add(newEvent); 
+                    operatedAccs.add(newEvent.WhatId);
+                    totalDaysEvents += 1;
+                }
+            }               
+        }
+
+        return dayEvents;
+    }
+
+    private static Event createEventForDayForAccount(OpeningHours__c accHours, Date day, List<Map<String, DateTime>> freeIntevals, Map<String, Object> userSettings, Boolean isOnlyPrefered) {
+
+        if((isOnlyPrefered && accHours.Preferred_Time__c == 0)) { return null; }
+
+        Datetime preferredTime = DateTime.newInstance(day, Time.newInstance(accHours.Preferred_Time__c.intValue(), 0, 0, 0));
+
+        for(Integer i = 0; i < freeIntevals.size(); i++){
+        
+            //loacate visit
+                //if prefered time
+                //  1. firts of all try to locate visit with time start at pfreferd time 
+                //  2. then locate visit with end time at end time of free interval (becouse it will be the nearest time to preferd time of Account)
+                //if not prefered time
+                //  3. just locate event on start time of interval
+            // не могу до конца принять, что пршлось логику из метода вынести просто в тело цикла
+            // может быть сдесь сохранить вызов метода было бы лучше? 
+            //Или то, что потом мне придется напистать тест на этот метод должно меня всегда предостерегать от инкапсуляции ради инкапсуляции?
+            //we need add pause between events to our cosideration, if previous or next inteval is busy
+            Map<String, DateTime> interval = freeIntevals[i];
+            Integer pauseBetweenVisitsInMinutes = ((Decimal)userSettings.get('pauseBetweenVisitsInMinutes')).intValue();
+            Integer visitTimeMinets = (Integer)userSettings.get('visitTimeMinets');
+            Datetime eventStart = (Datetime)interval.get('eventStart');
+            Datetime eventEnd = (Datetime)interval.get('eventEnd');
+            Datetime intevalStart = eventStart.addMinutes(eventStart.time() == (Time)userSettings.get('startOfDay') ? 0 : pauseBetweenVisitsInMinutes);
+            Datetime intervalEnd = eventEnd.addMinutes(eventEnd.time() == (Time)userSettings.get('endOfDay') ? 0 : -pauseBetweenVisitsInMinutes);
+
+            //then we need check work day borders of account's work day
+            intevalStart = intevalStart.time() < accHours.Opening_Time__c ? DateTime.newInstance(day, accHours.Opening_Time__c) : intevalStart;
+            intervalEnd = intervalEnd.time() > accHours.Closing_Time__c ? DateTime.newInstance(day, accHours.Closing_Time__c) : intervalEnd;       
+
+            //check weather enough time in interval
+            Datetime visitStart = intevalStart;
+            Datetime visitEnd = intevalStart.addMinutes(visitTimeMinets); 
+            Boolean rightInterval = !isOnlyPrefered || preferredTime >= intevalStart && preferredTime <= intervalEnd;
+
+            if(!rightInterval || visitEnd > intervalEnd) { continue; }
+
+            if(isOnlyPrefered){
+                //firstly try put visit with start time at preferredTime of Account
+                //if time is not enough, we will put visit in the end of inteval (in this case it lets us to catch prefered time)
+                visitEnd = preferredTime.addMinutes(visitTimeMinets);
+                if(visitEnd <= intervalEnd) { visitStart = preferredTime; } //1
+                else { visitStart = intervalEnd.addMinutes(-visitTimeMinets); visitEnd = intervalEnd; }  //2
+            }
+           
+            
+            if(freeIntevals.size() <= i + 1) { 
+                freeIntevals.add(new Map<String, DateTime>{'eventStart' => visitEnd, 'eventEnd' => interval.get('eventEnd')}); 
+            }
+            else { 
+                freeIntevals.add(i + 1, new Map<String, DateTime>{'eventStart' => visitEnd, 'eventEnd' => interval.get('eventEnd')}); 
+            }
+            interval.put('eventEnd', visitStart);          
+
+             
+            //add event for visit
+            return new Event(  
+                OwnerId = (Id)userSettings.get('id'),
+                WhatId = accHours.Account__c,
+                StartDateTime = visitStart, 
+                EndDateTime = visitEnd, 
+                Subject = 'Besuch ' + accHours.Account__r.Name,
+                Location = (String.isBlank(accHours.Account__r.BillingStreet) ? accHours.Account__r.BillingStreet + ', ' : '')
+                                + (String.isBlank(accHours.Account__r.BillingPostalCode) ? accHours.Account__r.BillingPostalCode + ', ' : '')
+                                    + (String.isBlank(accHours.Account__r.BillingCity) ? accHours.Account__r.BillingCity + ', ' : ''),
+                DurationInMinutes = visitTimeMinets);
+        }
+
+        return null;
+    }
+
+    private static DateTime findLastDateCrossedIntervals(List<Event> exsEvent, Datetime eventEnd){
+
+        for(Event ev : exsEvent) {
+            if(eventEnd < ev.endDateTime && eventEnd >= ev.startDateTime) { eventEnd = ev.EndDateTime; }
+        }
+
+        return eventEnd;
+    }
+
+    private static void rememberAccsByAddedVisits(List<Id> operatedAccs, List<Event> newEvents){
+        for(Event ev : newEvents) {
+            operatedAccs.add(ev.WhatId);
+        }
+    }
+
+
+
+    // Email Sending
     @AuraEnabled
     public static void sendEmails(List<Id> eventIds, List<Id> accIds){
 
         List<Messaging.SingleEmailMessage> messages = new List<Messaging.SingleEmailMessage>();
-        List<EmailTemplate> emailTempls = [SELECT Id, Subject, HtmlValue  FROM EmailTemplate WHERE DeveloperName = 'Visit_Email_Template_1733310669865' LIMIT 1];
-        List<Event> events = [SELECT Id, WhatId, StartDateTime FROM Event WHERE Id IN :eventIds];
-        Map<Id, Account> accounts = new Map<Id, Account>([SELECT PersonEmail FROM Account WHERE Id IN :accIds]);
+        List<EmailTemplate> emailTempls = [SELECT Id, Subject, HtmlValue  FROM EmailTemplate WHERE DeveloperName = 'Visit_Email_Template_1733310669865' WITH USER_MODE LIMIT 1];
+        List<Event> events = [SELECT Id, WhatId, StartDateTime FROM Event WHERE Id IN :eventIds WITH USER_MODE];
+        Map<Id, Account> accounts = new Map<Id, Account>([SELECT PersonEmail FROM Account WHERE Id IN :accIds WITH USER_MODE]);
 
-        if(emailTempls.size() == 0)
-            throw new AuraHandledException('Can not find email template!');
+        if(emailTempls.size() == 0) { throw new VisitPlannerControllerException('Can not find email template!'); }
 
         for(Event ev: events){
             messages.add(createEmail(ev, accounts.get(ev.WhatId), emailTempls[0]));
@@ -53,8 +292,7 @@ public with sharing class VisitPlannerController {
         Messaging.SendEmailResult[] messResalts = Messaging.sendEmail(messages, true);
 
         for(Messaging.SendEmailResult resMess : messResalts){
-            if (!resMess.isSuccess()) 
-                throw new AuraHandledException(resMess.getErrors()[0].getMessage());
+            if (!resMess.isSuccess()) { throw new VisitPlannerControllerException(resMess.getErrors()[0].getMessage()); }
         }
     }
 
@@ -78,300 +316,6 @@ public with sharing class VisitPlannerController {
         return mail;
     }
 
-    private static void checkOpeningHours(){
+    private class VisitPlannerControllerException extends Exception{} // AuraHandledException не виртиуальный, так что от Exception
 
-        List<AggregateResult> opHours = [   SELECT Account__c, Count(Id)
-                                            FROM OpeningHours__c 
-                                            WHERE Account__c IN :accs 
-                                                AND Account__r.RecordType.Name = 'Person Account'
-                                            GROUP BY Account__c];
-
-        if(opHours.size() < accs.size()) 
-            throw new AuraHandledException('Not all selected accounts are person or have filled Opening Hours!');
-    }
-
-    private static void setUserSettings(){
-        List<User> userSettingsList = [ SELECT StartOfDay__c, EndOfDay__c, PauseBetweenVisitsInMinutes__c, DefaultVisitDuration__c, NumberVisitsPerDay__c 
-                                        FROM User 
-                                        WHERE Id = :userId];
-
-        if(userSettingsList.size() == 0){          
-            throw new AuraHandledException('User is not configured, please contact your administrator');
-        }
-
-        startOfUserDay = userSettingsList[0].StartOfDay__c;
-        endOfUserDay = userSettingsList[0].EndOfDay__c;
-        pauseBetweenVisitsInMinutes = userSettingsList[0].PauseBetweenVisitsInMinutes__c?.intValue();
-        numberVisitsPerDay = userSettingsList[0].NumberVisitsPerDay__c?.intValue();
-        defaultVisitDuration = userSettingsList[0].DefaultVisitDuration__c;
-
-        visitTimeMinets = getVisitTime();
-    }
-
-    private static void addEventsForDay(DateTime currDay){
-
-        String dayOfWeek = currDay.format('EEEE');
-        DateTime nextDay = currDay.addDays(1);
-        Date day = Date.valueOf(currDay);
-        Integer totalDaysEvents = 0;
-
-        List<OpeningHours__c> opHours = [   SELECT  Day_Of_Week__c, 
-                                                    Preferred_Time__c,
-                                                    Opening_Time__c,
-                                                    Closing_Time__c,
-                                                    Account__c,
-                                                    Account__r.Name,
-                                                    Account__r.BillingStreet, 
-                                                    Account__r.BillingPostalCode, 
-                                                    Account__r.BillingCity 
-                                            FROM OpeningHours__c 
-                                            WHERE Account__c IN :accs 
-                                                AND Account__r.RecordType.Name = 'Person Account'
-                                                AND Day_Of_Week__c = :dayOfWeek
-                                            ORDER BY Opening_Time__c];
-
-        if(dayOfWeek == 'Saturday' || dayOfWeek == 'Sunday' || opHours.size() == 0){
-            addEventsForDay(nextDay);  
-            return;
-        }
-
-        createBusyIntervals(currDay, nextDay);
-        calculateFreeIntervals();
-        fillForAccounts(opHours, day, totalDaysEvents, true);
-        fillForAccounts(opHours, day, totalDaysEvents, false);
-
-        if(accs.size() > 0)
-            addEventsForDay(nextDay);   
-    }
-
-    private static void createBusyIntervals(DateTime currDay, DateTime nextDay){
-
-        List<Event> exsEvent = [SELECT StartDateTime, EndDateTime
-                                FROM Event 
-                                WHERE OwnerId = :userId
-                                    AND StartDateTime >= :currDay
-                                    AND EndDateTime < :nextDay
-                                ORDER BY StartDateTime];
-
-        busyIntevals = new List<TimeInterval>();       
-        DateTime startTime = getDateTimeFromTime(Date.valueOf(currDay), startOfUserDay);
-        DateTime endTime = getDateTimeFromTime(Date.valueOf(currDay), endOfUserDay);
-
-        if(todayTime > startTime) startTime = todayTime;
-
-        busyIntevals.add(new TimeInterval(startTime, startTime));
-               
-        for(Event ev : exsEvent){
-            TimeInterval interval = new TimeInterval(ev.StartDateTime, ev.EndDateTime);
-            findCrossedIntervals(exsEvent, interval);
-            busyIntevals.add(interval);
-        }
-        
-        busyIntevals.add(new TimeInterval(endTime, endTime));
-    }   
-
-    private static void calculateFreeIntervals(){
-
-        freeIntevals = new List<TimeInterval>();
-        for(Integer i = 0; i < busyIntevals.size(); i++){
-            if(busyIntevals.size() > i + 1){
-                TimeInterval interval = new TimeInterval(busyIntevals[i].eventEnd, busyIntevals[i + 1].eventStart);
-                freeIntevals.add(interval);
-            }
-        }
-    }
-
-    private static void fillForAccounts(List<OpeningHours__c> opHours, Date day, Integer totalDaysEvents, Boolean isOnlyPrefered){
-
-        for (Integer i = opHours.size() - 1; i >= 0 ; i--){     
-            if(fillAccountInterval(opHours[i], day, totalDaysEvents, isOnlyPrefered))
-                opHours.remove(i); 
-        }
-    }  
-
-    private static Boolean fillAccountInterval(OpeningHours__c accHours, Date day, Integer totalDaysEvents, Boolean isOnlyPrefered){
-
-        if(totalDaysEvents >= numberVisitsPerDay || (isOnlyPrefered && accHours.Preferred_Time__c == 0)) return false;
-
-        Integer intTime = accHours.Preferred_Time__c.intValue();
-        Datetime preferredTime = getDateTimeFromInteger(intTime, day);
-
-        for(TimeInterval interval : freeIntevals){
-        
-            //comment in the method
-            TimeInterval eventEnterval = lacateVisit(interval, preferredTime, isOnlyPrefered, accHours, day);
-            
-            if(eventEnterval != null){
-
-                insertBusyInterval(eventEnterval, getIndexOfBusyInteval(eventEnterval) + 1);
-                calculateFreeIntervals();
-                
-                newEvents.add(createEvent(  accHours.Account__c, 
-                                            accHours.Account__r.Name, 
-                                            (String.isBlank(accHours.Account__r.BillingStreet) ? accHours.Account__r.BillingStreet + ', ' : '')
-                                                + (String.isBlank(accHours.Account__r.BillingPostalCode) ? accHours.Account__r.BillingPostalCode + ', ' : '')
-                                                    + (String.isBlank(accHours.Account__r.BillingCity) ? accHours.Account__r.BillingCity + ', ' : ''),
-                                            eventEnterval.eventStart, 
-                                            eventEnterval.eventEnd));       
-                totalDaysEvents += 1;
-                removeAccFromList(accHours.Account__c); 
-
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    //if prefered time
-    //  1. firts of all try to locane event with time start on pfreferd time 
-    //  2. then with time end on emd time of free interval (becouse it will be the nearest time to pfreferd time)
-    //if not prefered time
-    //  3. just locate event on start time of interval
-    private static TimeInterval lacateVisit(TimeInterval freeInterval, Datetime preferredTime, Boolean isOnlyPrefered, OpeningHours__c accHours, Date day){
-        
-        Datetime eventStart;
-        Datetime eventEnd;
-        TimeInterval eventInterval;
-
-        Datetime intevalStrat = getVisitStartTime(freeInterval.eventStart, freeInterval.eventStart);
-        Datetime intevalEnd = getVisitEndTime(freeInterval.eventEnd, freeInterval.eventEnd);
-
-        intevalStrat = intevalStrat.time() < accHours.Opening_Time__c ?  getDateTimeFromTime(day, accHours.Opening_Time__c) : intevalStrat;
-        intevalEnd = intevalEnd.time() > accHours.Closing_Time__c ?  getDateTimeFromTime(day, accHours.Closing_Time__c) : intevalEnd;       
-
-        //check weather enough time in interval
-        eventEnd = calculateEndTime(intevalStrat); 
-        Boolean rightInterval = preferredTime >= intevalStrat && preferredTime <= intevalEnd || !isOnlyPrefered;
-
-        if(!rightInterval || !intervalEnoughToEvent(intevalEnd, eventEnd)) return null;
-
-        if(isOnlyPrefered){
-            eventEnd = calculateEndTime(preferredTime);
-            if(intervalEnoughToEvent(intevalEnd, eventEnd)){ 
-                eventInterval = new TimeInterval(preferredTime, eventEnd); //1
-            }
-            else{
-                eventStart = calculateStartTime(intevalEnd);
-                eventInterval = new TimeInterval(eventStart, intevalEnd); //2   
-            }
-        }
-        else {              
-            eventInterval = new TimeInterval(intevalStrat, eventEnd); //3
-        }
-
-        return eventInterval;
-    }
-
-    private static void insertBusyInterval(TimeInterval interval, Integer index){
-        busyIntevals.add(index, interval);
-    }
-
-    private static Integer getIndexOfBusyInteval(TimeInterval interval){
-
-        Integer indx = 0;
-        for(TimeInterval busyInt: busyIntevals){
-            if(busyInt.eventEnd <= interval.eventStart){
-                indx = busyIntevals.indexOf(busyInt);
-            }          
-        }
-        return indx;
-    }
-
-    private static void removeAccFromList(Id toRemove){
-        for(Integer i = accs.size() - 1; i >= 0; i--) {
-            if(accs[i].equals(toRemove)) {
-                accs.remove(i);
-            }
-        }
-    }
-
-    private static Integer getVisitTime(){
-        return getMinutesFromDecimal(defaultVisitDuration);
-    }
-
-    private static DateTime getVisitStartTime(DateTime startTime, DateTime freeIntervalStart) {
-        Boolean isPouseNeeded = isPreviousBusyInteval(freeIntervalStart);
-        return startTime.addMinutes(isPouseNeeded ? pauseBetweenVisitsInMinutes : 0);
-    } 
-
-    private static DateTime getVisitEndTime(DateTime endTime, DateTime freeIntervalEnd) {
-        Boolean isPouseNeeded = isNextBusyInterval(freeIntervalEnd);
-        return endTime.addMinutes(isPouseNeeded ? -pauseBetweenVisitsInMinutes : 0);
-    } 
-
-    private static Boolean isPreviousBusyInteval(DateTime considerTime){
-        return considerTime.time() != startOfUserDay;
-    }
-
-    private static Boolean isNextBusyInterval(DateTime considerTime){
-        return considerTime.time() != endOfUserDay;
-    }
-
-    private static DateTime calculateEndTime(DateTime startTime) {
-        return startTime.addMinutes(visitTimeMinets);
-    } 
-
-    private static DateTime calculateStartTime(DateTime endTime) {
-        return endTime.addMinutes(-visitTimeMinets);
-    } 
-
-    private static Boolean intervalEnoughToEvent(DateTime intervalEnd, DateTime eventEnd){
-        return intervalEnd >= eventEnd;
-    }
-
-    private static void findCrossedIntervals(List<Event> exsEvent, TimeInterval interval){
-
-        for(Event ev : exsEvent){
-            if(interval.eventEnd < ev.endDateTime && interval.eventEnd >= ev.startDateTime){
-                interval.eventEnd = ev.EndDateTime;
-                findCrossedIntervals(exsEvent, interval);
-                break;
-            }
-        }
-    }
-
-    private static DateTime getDateTimeFromInteger(Integer hour, Date day){
-        return DateTime.newInstance(day, Time.newInstance(hour, 0, 0, 0));    
-    }
-
-    private static Integer getMinutesFromDecimal(Decimal timeDec){
-        Integer hours = timeDec.round(System.RoundingMode.DOWN).intValue();
-        return  hours * 60 + ((timeDec - hours) * 100).intValue();
-    }
-
-    private static DateTime getDateTimeFromTime(Date day, Time tim){
-        return DateTime.newInstance(day, tim);    
-    }
-
-    private static Event createEvent(Id accountId, String accountName, String accountBillingAddress,  DateTime eventStart, DateTime eventEnd){      
-
-        return new Event(
-            OwnerId = userId,
-            WhatId = accountId,
-            StartDateTime = eventStart, 
-            EndDateTime = eventEnd, 
-            Subject = 'Besuch ' + accountName,
-            Location = accountBillingAddress,
-            DurationInMinutes = visitTimeMinets);
-    }  
-
-    private static void insertEvents(List<Event> newEvents){
-        try {
-            insert newEvents;    
-        } catch (Exception e) {
-            throw new AuraHandledException(e.getMessage());
-        }
-    }
-
-    private with sharing class TimeInterval{
-      
-        public DateTime eventStart;
-        public DateTime eventEnd;  
-
-        public TimeInterval(DateTime eventStart, DateTime eventEnd){
-            this.eventStart = eventStart;
-            this.eventEnd = eventEnd;
-        }
-    } 
 }
