@@ -1,3 +1,5 @@
+//controller for VisitPlanner LWC
+//does: create events for visits, send email
 public with sharing class VisitPlannerController {
 
     //  правки:
@@ -123,7 +125,6 @@ public with sharing class VisitPlannerController {
  
         //get all busy inteval in curr day, it will be needed to get free intervals
         List<Event> dayEvents = new List<Event>();
-        List<Event> newEvents = new List<Event>();
         List<Map<String, Datetime>> busyIntevals = new List<Map<String, Datetime>>();
         List<Map<String, Datetime>> freeIntevals = new List<Map<String, Datetime>>();
        
