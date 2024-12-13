@@ -1,0 +1,15 @@
+<apex:page standardController="Account" recordSetVar="accounts" extensions="VisitPlannerVFContainerControllerExt"> 
+<apex:includeLightning />    
+<div id="LwcId" />
+<script>
+    document.addEventListener('lightning__showtoast', event => {
+        sforce.one.showToast(event.toastAttributes);
+    });
+    
+  	$Lightning.use("c:visitPlannerAuraContainer", function() {
+        $Lightning.createComponent("c:visitPlanner",
+        { accIds   : {!accs} },
+        "LwcId");
+    });
+</script>
+</apex:page>

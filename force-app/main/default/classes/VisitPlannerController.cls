@@ -1,25 +1,27 @@
 public with sharing class VisitPlannerController {
 
-
-    //правки:
-    //1. User_moode и chema.SObjectType..isCreateable() добавлены
-    //2. Методы применяю только там где есть повторяющий код, или есть вложенные циклы (так как это бестрактис для apex)
-    //      было 26! методов для создания визитовб стало 6!
-    //3. Убрал внутренний класс и заменил его на Map<String, DateTime>
-    //4. Убрал поля класса и заменил их переменными метода
-    //5. Убрал последовательный вызов методов, которые ничего не получали и ничего не возвращали на, по возможности, чистые функции
-    //6. Использовал Database методов вместо try insert catch, обработал результат
-    //7. Использовал if(condition) { behavior; } 
-    //8. Удалил __test__ папку из LWC
+    //  правки:
+    //1.    User_moode и chema.SObjectType..isCreateable() добавлены
+    //2.    Методы применяю только там где есть повторяющий код, или есть вложенные циклы (так как это бестрактис для apex)
+    //          было 26! методов для создания визитовб стало 7!
+    //3.    Убрал внутренний класс и заменил его на Map<String, DateTime>
+    //4.    Убрал поля класса и заменил их переменными метода
+    //5.    Убрал последовательный вызов методов, которые ничего не получали и ничего не возвращали на, по возможности, чистые функции
+    //6.    Использовал Database методов вместо try insert catch, обработал результат
+    //7.    Использовал if(condition) { behavior; } 
+    //8.    Удалил __test__ папку из LWC
+    //9.    Подтянул VF Page в проект и залил на GITHub
+    //10.   console.log поубирал везде
+    //11.   Сделал проверку на то, что не выбраны аккаунты в LWC (+ меняю надпись при этом, лочу кнопку)
 
     // Visit Scheduling
     //АЛГОРИТМ
     //1. Рекурсивно берем день за днем начиная с заданного пользователем, и распределяем визиты во все свободные места, до тех пор пока не распределим
     //2. Для каждого дня:
-        //2.1. Идем по всем аккаунтам, которые еще не распределены (по факту перебираем OpeningHours для дня недели)
+        //2.1. Идем по всем аккаунтам, которые еще не распределены (по факту перебираем OpeningHours для дня недели и проеряем в массиве разнесенных аккаунтов)
             //2.1.1.1. Сначала мы пытаемся распределить визиты с учетом предпочтительного времени, которое указал аккаунт
             //2.1.1.2. Заполняем все оставшееся время оставшимися не распределенными визитами
-                // Так и не придумал алгоритм на Map<> или State Patern, которые бы не катастрафически сильно не снижали производительность (хотя передача флага своего рода State Patern, когда не используем обекты)
+                // Так и не придумал алгоритм на Map<> или State Patern, которые бы катастрафически сильно не снижали оптимальность
     //3. Если остались нераспреденные аккаунты переходим к следующему буднему дню и все начинаем с п.1
 
     @AuraEnabled
@@ -94,9 +96,11 @@ public with sharing class VisitPlannerController {
       
                                     
         // locate visits from day to day  by recurtion
+        //we consider day by day because the locate visits algorithm is quite sophisticated. (this method call recursion)
         newEvents.addAll(addEventsForDay(startDateTime, opHours, plannedEvents, userSettings, accIds.size(), new List<id>()));
 
         
+        // Insert created events in DB
         List<Database.SaveResult> srList = Database.insert(newEvents, true, AccessLevel.USER_MODE);
         String errorMessge = '';    
         for (Database.SaveResult sr : srList) {           
@@ -111,26 +115,24 @@ public with sharing class VisitPlannerController {
     }
 
     private static List<Event> addEventsForDay(DateTime currDay, List<OpeningHours__c> opHours, List<Event> plannedEvents, Map<String, Object> userSettings, Integer countAcc, List<Id> operatedAccs) {
-
-        //we consider day by day because the locate algorithm is quite sophisticated.
-  
+ 
         //get all busy inteval in curr day, it will be needed to get free intervals
         List<Event> dayEvents = new List<Event>();
         List<Event> newEvents = new List<Event>();
         List<Map<String, Datetime>> busyIntevals = new List<Map<String, Datetime>>();
         List<Map<String, Datetime>> freeIntevals = new List<Map<String, Datetime>>();
        
-        String dayOfWeek = currDay.format('EEEE');
-        Datetime nextDay = currDay.addDays(1);
         Date day = Date.valueOf(currDay);
+        String dayOfWeek = currDay.format('EEEE');
+        Datetime nextDay = currDay.addDays(1);     
         Integer totalDaysEvents = 0; // we can't exceed max events per day for user
+        
         Datetime startTime = Datetime.newInstance(day, (Time)userSettings.get('startOfDay')); 
         DateTime now = System.now();
         if(startTime < now) { startTime = now; }// it can be today in the middle of day, so cut previous part of day
         Datetime endTime = Datetime.newInstance(day, (Time)userSettings.get('endOfDay'));
 
-        if(dayOfWeek != 'Saturday' && dayOfWeek != 'Sunday') {  
-            
+        if(dayOfWeek != 'Saturday' && dayOfWeek != 'Sunday') {            
             // we need boarders of user work day for create later free intevals
             busyIntevals.add(new Map<String, DateTime>{'eventStart' => startTime, 'eventEnd' => startTime});              
             for(Event ev : plannedEvents) {             
@@ -163,8 +165,8 @@ public with sharing class VisitPlannerController {
 
     private static List<Event> createEventsForDay(List<OpeningHours__c> opHours, Date day, String dayOfWeek, List<Map<String, Datetime>> freeIntevals, List<Id> operatedAccs, Map<String, Object> userSettings, Integer totalDaysEvents,  Boolean isOnlyPrefered) {
           
-        List<Event> dayEvents = new List<Event>();
         Event newEvent;
+        List<Event> dayEvents = new List<Event>();   
         Decimal numberVisitsPerDay = (Decimal)userSettings.get('numberVisitsPerDay');
         
         for(OpeningHours__c openingHours : opHours) {    
@@ -172,7 +174,7 @@ public with sharing class VisitPlannerController {
             if(!operatedAccs.contains(openingHours.Account__c) && openingHours.Day_Of_Week__c == dayOfWeek) {  
                 
                 //оставляю этот метод потому что по бестпрктис цикл в циклне - нельзя
-                //а там мне приедся пройтись по свободным интервалам и определить подходит ли он для заполнения, заполнить пересчитать свободный интервал
+                //а там мне приедся пройтись по свободным интервалам и определить подходит ли он для заполнения, потом еще пересчитать (разбить) свободный интервал
                 newEvent = createEventForDayForAccount(openingHours, day, freeIntevals, userSettings, isOnlyPrefered);
                 
                 if(newEvent != null) { 
@@ -230,14 +232,10 @@ public with sharing class VisitPlannerController {
                 if(visitEnd <= intervalEnd) { visitStart = preferredTime; } //1
                 else { visitStart = intervalEnd.addMinutes(-visitTimeMinets); visitEnd = intervalEnd; }  //2
             }
-           
-            
-            if(freeIntevals.size() <= i + 1) { 
-                freeIntevals.add(new Map<String, DateTime>{'eventStart' => visitEnd, 'eventEnd' => interval.get('eventEnd')}); 
-            }
-            else { 
-                freeIntevals.add(i + 1, new Map<String, DateTime>{'eventStart' => visitEnd, 'eventEnd' => interval.get('eventEnd')}); 
-            }
+
+            //calculate borders of new free intevals           
+            if(freeIntevals.size() <= i + 1) { freeIntevals.add(new Map<String, DateTime>{'eventStart' => visitEnd, 'eventEnd' => interval.get('eventEnd')}); }
+            else { freeIntevals.add(i + 1, new Map<String, DateTime>{'eventStart' => visitEnd, 'eventEnd' => interval.get('eventEnd')}); }
             interval.put('eventEnd', visitStart);          
 
              
@@ -267,9 +265,7 @@ public with sharing class VisitPlannerController {
     }
 
     private static void rememberAccsByAddedVisits(List<Id> operatedAccs, List<Event> newEvents){
-        for(Event ev : newEvents) {
-            operatedAccs.add(ev.WhatId);
-        }
+        for(Event ev : newEvents) { operatedAccs.add(ev.WhatId); }
     }
 
 
