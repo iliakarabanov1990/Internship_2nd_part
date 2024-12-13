@@ -39,7 +39,7 @@ export default class VisitPlanner extends LightningElement {
     optionChoiceHint = '';
 
 
-    haderLabel = visitPlanerHeader;
+    headerLabel = visitPlanerHeader;
     mainHintLabel = visitPlanerMainHintEmpty;
     startDateLabel = visitPlanerStartDate;
     optionChoiceLabel = visitPlanerOptionChoice;
