@@ -5,7 +5,7 @@ public with sharing class VisitPlannerController {
     //  правки:
     //1.    User_moode и chema.SObjectType..isCreateable() добавлены
     //2.    Методы применяю только там где есть повторяющий код, или есть вложенные циклы (так как это бестрактис для apex)
-    //          было 26! методов для создания визитовб стало 7!
+    //          было 26! методов для создания визитов стало 7!
     //3.    Убрал внутренний класс и заменил его на Map<String, DateTime>
     //4.    Убрал поля класса и заменил их переменными метода
     //5.    Убрал последовательный вызов методов, которые ничего не получали и ничего не возвращали на, по возможности, чистые функции
@@ -108,7 +108,7 @@ public with sharing class VisitPlannerController {
 
         
         // Insert created events in DB
-        List<Database.SaveResult> srList = Database.insert(newEvents, true, AccessLevel.USER_MODE);
+        List<Database.SaveResult> srList = Database.insert(newEvents, false, AccessLevel.USER_MODE);
         String errorMessge = '';    
         for (Database.SaveResult sr : srList) {           
             if (!sr.isSuccess()) {              
