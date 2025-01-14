@@ -1,10 +1,20 @@
 public with sharing class ContactTriggerHandler extends TriggerHandler{
    
     public override void afterUpdate() { updateAccountRollUp(Trigger.new, true); } 
-    public override void afterInsert() { updateAccountRollUp(Trigger.new, false); }
+    public override void afterInsert() { updateAccountRollUp(Trigger.new, false); createContactsOnReqres(Trigger.new); }
     public override void afterUndelete() { updateAccountRollUp(Trigger.new, false); }
     public override void afterDelete() { updateAccountRollUp(Trigger.old, false); }
     
+
+    private void createContactsOnReqres(List<sObject> conts) {
+
+        List<String> names = new List<String>();
+
+        for(sObject con : conts) { names.add((String)con.get('LastName')); }
+        
+        System.enqueueJob(new QueueableRequstService(names));
+    }
+
 	private void updateAccountRollUp(List<sObject> conts, Boolean checkAccountChange) {
 
         Map<Id, Account> accounts = new Map<Id, Account>();
