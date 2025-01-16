@@ -22,7 +22,6 @@ public with sharing class SendRequastService {
         ReqResJsonParser objJsonParser = (ReqResJsonParser) JSON.deserializeStrict(response.getBody(), ReqResJsonParser.class);
         for(ReqResJsonParser.data data: objJsonParser.data){
             cons.add(new Contact(FirstName = data.first_name, LastName = data.last_name, Email = data.email, ReqresId__c = data.id, AvatarURL__c = data.avatar));
-            break;
         }
 
         try { Database.upsert(cons, Schema.Contact.field.ReqresId__c, true, AccessLevel.USER_MODE); } 
