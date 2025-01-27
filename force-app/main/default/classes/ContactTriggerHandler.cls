@@ -8,6 +8,8 @@ public with sharing class ContactTriggerHandler extends TriggerHandler{
 
     private void createContactsOnReqres(List<sObject> conts) {
 
+        if(!Schema.SObjectType.Account.fields.name.isAccessible() || conts.size() == 0) { return; }
+
         List<String> names = new List<String>();
 
         for(sObject con : conts) { names.add((String)con.get('LastName')); }
